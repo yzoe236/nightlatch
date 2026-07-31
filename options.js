@@ -1,4 +1,4 @@
-/* ProfileLock options — password, auto-lock, themes, protected sites.
+/* Nightlatch options — password, auto-lock, themes, protected sites.
  * Every feature is free; the only gating here is "does this control apply
  * on this machine right now". */
 (function () {

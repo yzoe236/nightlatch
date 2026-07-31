@@ -1,4 +1,4 @@
-/* ProfileLock lock-screen themes. Shared by content overlay,
+/* Nightlatch lock-screen themes. Shared by content overlay,
  * locked.html and the options picker. */
 (function (root) {
   'use strict';

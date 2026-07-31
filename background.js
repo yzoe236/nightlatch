@@ -1,4 +1,4 @@
-/* ProfileLock service worker — the single source of truth for lock state.
+/* Nightlatch service worker — the single source of truth for lock state.
  *
  * THE core design decision (and the fix for a bug shared by several similar
  * extensions): unlocking on one computer must never unlock another.
@@ -14,7 +14,7 @@
  */
 importScripts('crypto.js');
 
-const PLK = ProfileLockCrypto;
+const PLK = NightlatchCrypto;
 const IDLE_ALARM = 'plk-idle-check';
 const DEFAULT_AUTOLOCK_MIN = 5;
 

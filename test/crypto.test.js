@@ -1,8 +1,8 @@
-/* Node unit tests for ProfileLock crypto + backoff.
+/* Node unit tests for Nightlatch crypto + backoff.
  * Run: node test/crypto.test.js */
 'use strict';
 require('../crypto.js');
-const P = globalThis.ProfileLockCrypto;
+const P = globalThis.NightlatchCrypto;
 
 (async function () {
   let pass = 0, fail = 0;

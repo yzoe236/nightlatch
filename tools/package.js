@@ -1,9 +1,9 @@
-/* Package ProfileLock for distribution.
- *   node tools/package.js            → dist/profilelock-transfer.zip
+/* Package Nightlatch for distribution.
+ *   node tools/package.js            → dist/nightlatch-transfer.zip
  *       Runnable copy for your own machines. KEEPS manifest "key" so the
  *       extension ID (and therefore synced password/license) stays identical
  *       everywhere. Excludes dev-key.pem, tests and tooling.
- *   node tools/package.js --store    → dist/profilelock-store.zip
+ *   node tools/package.js --store    → dist/nightlatch-store.zip
  *       Chrome Web Store upload. STRIPS manifest "key" (the store assigns the
  *       real ID) and everything a reviewer shouldn't see.
  * Zipping uses PowerShell's Compress-Archive — no npm dependencies.
@@ -40,7 +40,7 @@ if (STORE) {
   fs.writeFileSync(mfPath, JSON.stringify(mf, null, 2) + '\n');
 }
 
-const out = path.join(ROOT, 'dist', STORE ? 'profilelock-store.zip' : 'profilelock-transfer.zip');
+const out = path.join(ROOT, 'dist', STORE ? 'nightlatch-store.zip' : 'nightlatch-transfer.zip');
 fs.rmSync(out, { force: true });
 execFileSync('powershell.exe', ['-NoProfile', '-Command',
   'Compress-Archive -Path "' + stage + '\\*" -DestinationPath "' + out + '" -Force']);

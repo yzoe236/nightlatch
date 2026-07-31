@@ -1,4 +1,4 @@
-/* ProfileLock content script — covers the page while locked.
+/* Nightlatch content script — covers the page while locked.
  * Runs at document_start, fail-closed: a dark veil goes up synchronously
  * BEFORE first paint, then the service worker is asked whether this device
  * is actually locked. Unlock UI lives inside a closed shadow root so page
@@ -90,7 +90,7 @@
     errEl.className = 'err';
     var foot = document.createElement('div');
     foot.className = 'foot';
-    foot.textContent = 'ProfileLock · Lock state is per-device and never syncs';
+    foot.textContent = 'Nightlatch · Lock state is per-device and never syncs';
 
     cardEl.appendChild(lockIcon);
     cardEl.appendChild(h1El);

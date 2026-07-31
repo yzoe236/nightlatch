@@ -1,4 +1,4 @@
-/* ProfileLock popup — status + lock-now + quick unlock. */
+/* Nightlatch popup — status + lock-now + quick unlock. */
 (function () {
   'use strict';
 

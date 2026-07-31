@@ -1,8 +1,8 @@
 # Security Policy
 
-## What ProfileLock is — and is not
+## What Nightlatch is — and is not
 
-ProfileLock is a **curtain against casual snooping on a shared computer**, not a vault.
+Nightlatch is a **curtain against casual snooping on a shared computer**, not a vault.
 
 It stops the colleague who sits down at an unattended machine and starts clicking
 through your Gmail, history and saved sessions. It does **not** stop a determined
@@ -18,7 +18,7 @@ attacker with access to the same OS account.
 | Chrome's built-in PDF viewer and some internal pages cannot be covered | Content scripts cannot run there. Strict mode redirects the sensitive internal pages instead. |
 
 **The real security baseline on a shared machine is `Win+L` (lock the OS) or a
-separate OS account.** ProfileLock is a second curtain on top of that, for the
+separate OS account.** Nightlatch is a second curtain on top of that, for the
 times you forget.
 
 ## Design choices that matter

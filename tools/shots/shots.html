@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Nightlatch — store screenshots</title>
+<style>
+  /* Each .shot is exactly 1280x800, the Chrome Web Store screenshot size.
+     Screenshot them one at a time via ?n=1..4 . */
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, "Segoe UI", sans-serif; background: #111; }
+  .shot { width: 1280px; height: 800px; position: relative; overflow: hidden; display: none; }
+  .shot.on { display: block; }
+
+  .caption { position: absolute; left: 64px; top: 56px; z-index: 5; max-width: 620px; }
+  .caption h2 { margin: 0 0 10px; font-size: 40px; line-height: 1.15; color: #fff; font-weight: 700; letter-spacing: -.5px; }
+  .caption p { margin: 0; font-size: 19px; line-height: 1.5; color: rgba(255,255,255,.72); }
+  .caption.dark h2 { color: #16233f; }
+  .caption.dark p { color: rgba(22,35,63,.72); }
+
+  /* ---- shot 1: the lock screen ---- */
+  #s1 { background: linear-gradient(135deg,#141a2e,#0a0c15); }
+  .lockcard { position: absolute; left: 50%; top: 56%; transform: translate(-50%,-50%); width: 320px; text-align: center; color: #e8eaed; }
+  .lockcard .glyph { font-size: 52px; }
+  .lockcard h3 { font-size: 18px; margin: 14px 0 3px; font-weight: 600; }
+  .lockcard .sub { font-size: 13px; color: rgba(232,234,237,.55); margin-bottom: 20px; }
+  .lockcard input { width: 100%; padding: 12px; border-radius: 9px; border: 1px solid #3c4043; background: #202124;
+                    color: #e8eaed; font-size: 15px; text-align: center; }
+  .lockcard button { width: 100%; margin-top: 11px; padding: 11px 0; border: 0; border-radius: 9px;
+                     background: #8ab4f8; color: #202124; font-size: 15px; font-weight: 600; }
+  .lockcard .foot { font-size: 11px; color: rgba(232,234,237,.38); margin-top: 26px; }
+
+  /* ---- shot 2: two machines ---- */
+  #s2 { background: linear-gradient(135deg,#eef2f9,#dde5f3); }
+  .pcs { position: absolute; left: 0; right: 0; bottom: 128px; display: flex; justify-content: center; gap: 70px; }
+  .pc { width: 400px; }
+  .screen { height: 232px; border-radius: 14px 14px 0 0; border: 3px solid #16233f; border-bottom: 0;
+            display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 10px; }
+  .screen .big { font-size: 46px; }
+  .screen .txt { font-size: 15px; font-weight: 600; }
+  .stand { height: 15px; background: #16233f; border-radius: 0 0 9px 9px; }
+  .pc .name { text-align: center; margin-top: 15px; font-size: 17px; font-weight: 600; color: #16233f; }
+  .pc .state { text-align: center; margin-top: 3px; font-size: 14px; }
+  .home .screen { background: #fff; color: #188038; }
+  .lab .screen { background: #0b0d12; color: #e8eaed; }
+  .home .state { color: #188038; }
+  .lab .state { color: #c5221f; font-weight: 600; }
+  .arrow { position: absolute; left: 50%; bottom: 278px; transform: translateX(-50%); text-align: center; }
+  .arrow .line { width: 250px; border-top: 3px dashed #c5221f; position: relative; }
+  .arrow .no { font-size: 34px; position: absolute; left: 50%; top: -26px; transform: translateX(-50%); background: #e6ecf7; padding: 0 8px; }
+
+  /* ---- shot 3: settings ---- */
+  #s3 { background: linear-gradient(135deg,#eef2f9,#dde5f3); }
+  .panel { position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); width: 660px;
+           background: #fff; border-radius: 16px; box-shadow: 0 18px 50px rgba(20,30,60,.22); padding: 26px 30px; }
+  .panel h4 { margin: 0 0 4px; font-size: 15px; color: #16233f; }
+  .panel .grp { padding: 13px 0; border-bottom: 1px solid #eceff5; }
+  .panel .grp:last-child { border-bottom: 0; }
+  .panel .row { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #3c4557; }
+  .badge { font-size: 10px; font-weight: 700; color: #1a73e8; border: 1px solid #1a73e8; border-radius: 4px; padding: 1px 6px; }
+  .num { border: 1px solid #c9d1e0; border-radius: 6px; padding: 5px 12px; font-weight: 600; color: #16233f; }
+  .sw { width: 38px; height: 21px; border-radius: 20px; background: #1a73e8; position: relative; flex: none; }
+  .sw::after { content: ''; position: absolute; right: 2px; top: 2px; width: 17px; height: 17px; border-radius: 50%; background: #fff; }
+  .sw.off { background: #c9d1e0; }
+  .sw.off::after { left: 2px; right: auto; }
+  .hint { font-size: 12.5px; color: #7b8598; margin-top: 5px; }
+
+  /* ---- shot 4: privacy ---- */
+  #s4 { background: linear-gradient(135deg,#141a2e,#0a0c15); }
+  .facts { position: absolute; left: 64px; top: 252px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px 26px; width: 1150px; }
+  .fact { background: rgba(255,255,255,.045); border: 1px solid rgba(138,180,248,.22); border-radius: 13px; padding: 28px 26px; }
+  .fact .t { font-size: 19px; font-weight: 600; color: #e8eaed; margin-bottom: 7px; }
+  .fact .d { font-size: 15px; color: rgba(232,234,237,.62); line-height: 1.5; }
+  .fact .t span { color: #8ab4f8; }
+  .strip { position: absolute; left: 0; right: 0; bottom: 54px; text-align: center; font-size: 15px;
+           color: rgba(138,180,248,.75); letter-spacing: .2px; }
+</style>
+</head>
+<body>
+
+<div class="shot" id="s1">
+  <div class="caption">
+    <h2>Step away, and the curtain drops.</h2>
+    <p>A full-page lock covers every tab. Nothing is readable, clickable or copyable until your password goes in.</p>
+  </div>
+  <div class="lockcard">
+    <div class="glyph">🔒</div>
+    <h3>Profile Locked</h3>
+    <div class="sub">Enter password to unlock this device</div>
+    <input type="password" value="••••••••" readonly>
+    <button>Unlock</button>
+    <div class="foot">Nightlatch · Lock state is per-device and never syncs</div>
+  </div>
+</div>
+
+<div class="shot" id="s2">
+  <div class="caption dark">
+    <h2>Unlocking at home never unlocks the lab.</h2>
+    <p>Other lock extensions keep the unlocked flag in synced storage — so the shared machine you walked away from quietly opens too. Nightlatch keeps lock state on the device it belongs to.</p>
+  </div>
+  <div class="arrow"><div class="line"><div class="no">🚫</div></div></div>
+  <div class="pcs">
+    <div class="pc home">
+      <div class="screen"><div class="big">🔓</div><div class="txt">Unlocked by you</div></div>
+      <div class="stand"></div>
+      <div class="name">Your laptop at home</div>
+      <div class="state">You are sitting here</div>
+    </div>
+    <div class="pc lab">
+      <div class="screen"><div class="big">🔒</div><div class="txt">Still locked</div></div>
+      <div class="stand"></div>
+      <div class="name">Shared lab computer</div>
+      <div class="state">Stays locked while you are away</div>
+    </div>
+  </div>
+</div>
+
+<div class="shot" id="s3">
+  <div class="caption dark">
+    <h2>Per-computer settings, because computers differ.</h2>
+    <p>Relax the timer on the PC only you use. It will not weaken the shared one — that switch never syncs.</p>
+  </div>
+  <div class="panel">
+    <div class="grp">
+      <h4>Auto-lock</h4>
+      <div class="row"><div class="sw"></div> Idle auto-lock on this computer <span class="badge">THIS DEVICE</span></div>
+      <div class="hint">Measures inactivity in <b>this Chrome profile</b> — other people using the computer never reset your timer.</div>
+    </div>
+    <div class="grp">
+      <div class="row">Lock after this profile is untouched for <span class="num">5</span> minutes</div>
+      <div class="hint">A tab playing audio counts as in use. Screen lock (Win+L) and browser restart always lock.</div>
+    </div>
+    <div class="grp">
+      <h4>Protected websites</h4>
+      <div class="row" style="color:#16233f;font-family:ui-monospace,Consolas,monospace;font-size:13px">mail.google.com&nbsp;&nbsp;·&nbsp;&nbsp;chase.com</div>
+      <div class="hint">These ask for the password again, even while the profile is unlocked.</div>
+    </div>
+  </div>
+</div>
+
+<div class="shot" id="s4">
+  <div class="caption">
+    <h2>Nothing to trust us with.</h2>
+    <p>Free, open source, and provably offline — the whole point of a lock you can read the source of.</p>
+  </div>
+  <div class="facts">
+    <div class="fact"><div class="t"><span>0</span> network requests</div><div class="d">No backend, no account, no analytics. Search the source for fetch, XMLHttpRequest, WebSocket — there are none.</div></div>
+    <div class="fact"><div class="t">Your password is <span>never stored</span></div><div class="d">Only a PBKDF2-SHA256 hash with a random salt, 310,000 iterations, verified in constant time.</div></div>
+    <div class="fact"><div class="t"><span>Open source</span>, MIT licensed</div><div class="d">Read every line before you type a password into it. github.com/yzoe236/nightlatch</div></div>
+    <div class="fact"><div class="t">Honest about its <span>limits</span></div><div class="d">A curtain against casual snooping, not a vault. Anyone who disables the extension gets past it — we document that instead of hiding it.</div></div>
+  </div>
+  <div class="strip">github.com/yzoe236/nightlatch &nbsp;·&nbsp; MIT licensed &nbsp;·&nbsp; no data collected, ever</div>
+</div>
+
+<script>
+  var n = new URLSearchParams(location.search).get('n') || '1';
+  var el = document.getElementById('s' + n);
+  if (el) el.classList.add('on');
+  // Fit the 1280x800 canvas into whatever viewport we have (HiDPI machines
+  // report far fewer CSS pixels than the shot needs). Capture, then crop the
+  // top-left W x W*0.625 of the screenshot and resize to exactly 1280x800.
+  document.documentElement.style.overflow = 'hidden';
+  document.body.style.margin = '0';
+  // raw=1 (headless capture at a true 1280x800 viewport) needs no scaling;
+  // in a normal window we shrink the canvas so the whole shot is previewable.
+  var raw = new URLSearchParams(location.search).get('raw');
+  if (el && !raw && window.innerWidth < 1280) {
+    el.style.transformOrigin = 'top left';
+    el.style.transform = 'scale(' + (window.innerWidth / 1280) + ')';
+  }
+</script>
+</body>
+</html>

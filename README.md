@@ -1,22 +1,48 @@
-# ProfileLock
+<p align="center">
+  <img src="icons/icon128.png" width="88" alt="Nightlatch">
+</p>
 
-**Password-lock your Chrome profile on a shared computer — with a lock state that
-never follows you home.**
+<h1 align="center">Nightlatch</h1>
 
-Free, open source, no accounts, no telemetry, zero network requests.
+<p align="center">
+  <b>A profile lock for Google Chrome™ that keeps the lock on the computer you locked.</b><br>
+  Free, open source, no accounts, no telemetry, zero network requests.
+</p>
+
+<p align="center">
+  <a href="docs/INSTALL.md">Install</a> ·
+  <a href="SECURITY.md">Threat model</a> ·
+  <a href="https://yzoe236.github.io/nightlatch/privacy.html">Privacy policy</a> ·
+  <a href="LICENSE">MIT</a>
+</p>
 
 ---
 
-## The problem it fixes
+## Who this is for
+
+You share a computer, and your Google profile is signed in on it.
+
+- A **lab or office workstation** several people use
+- A **front-desk or shared-workspace PC**
+- A **family desktop** where everyone uses the same OS login
+- A **classroom or library machine** you sign into repeatedly
+
+Walk away for two minutes and anyone can read your mail, your history, your saved
+sessions, and anything else a signed-in profile reaches. Locking the whole operating
+system is the correct answer — and everyone forgets. Nightlatch is the second
+curtain, for the times you forget.
+
+## The bug it was built to fix
 
 Several password-lock extensions store their *unlocked* flag in
 `chrome.storage.sync`, which follows your Google account across machines. The
-result is a quiet failure exactly where it matters:
+result is a quiet failure exactly where it hurts:
 
 > You lock your browser on the shared lab computer and go home. At home you unlock
 > your own browser — and the lab machine unlocks too, while you are nowhere near it.
 
-ProfileLock keeps the two apart:
+The protection disappears precisely when you are not there to notice. Nightlatch
+splits storage by intent so that cannot happen:
 
 | Data | Stored in | Behaviour |
 |---|---|---|
@@ -54,21 +80,35 @@ Unlocking at home can never unlock the lab machine.
 `chrome://extensions` and disables the extension gets past it — that is true of
 every extension in this category, and we deliberately leave that page reachable so
 you can never lock yourself out. On a shared machine the real baseline is `Win+L`
-or a separate OS account; ProfileLock is a second curtain for the times you forget.
+or a separate OS account; Nightlatch is a second curtain for the times you forget.
 
 Full threat model: [SECURITY.md](SECURITY.md).
 
 ## Install
 
-**From source (developer mode)**
+**Either way works — full step-by-step guide: [docs/INSTALL.md](docs/INSTALL.md).**
 
-1. Download or clone this repository.
-2. Open `chrome://extensions`, enable **Developer mode**.
-3. Click **Load unpacked** and select the project folder.
-4. The settings page opens on first run — set a password there.
+### From the Chrome Web Store
 
-Repeat on each computer. Unpacked extensions do not auto-update: to update, replace
-the files and click **Reload (⟳)** on the extension card.
+Search the store for **Nightlatch** and click *Add to Chrome*. Chrome keeps it updated
+and installs it on your other signed-in computers for you.
+
+<!-- STORE_URL --> *(listing link goes here once published)*
+
+### From source (run the code you can read)
+
+1. **Code → Download ZIP** on this page (or `git clone`), and unzip somewhere permanent —
+   Chrome loads the extension from that folder on every start, so don't delete or move it.
+2. Open `chrome://extensions` and enable **Developer mode**.
+3. **Load unpacked** → select the folder.
+4. The settings page opens on first run — set a password.
+
+Repeat on each computer: extensions loaded this way neither install themselves on your
+other machines nor auto-update. To update, replace the files and click **Reload (⟳)** on
+the extension card.
+
+Your **password syncs** (only its hash is stored), so you set it once. The **lock state
+deliberately does not** — that is the whole point.
 
 ## Privacy
 
@@ -88,15 +128,15 @@ locked.html/js   Landing lock screen for guarded internal pages
 popup.html/js    Status, lock now, quick unlock, per-device toggle
 options.html/js  Password, auto-lock, theme, protected sites
 test/            node test/crypto.test.js
-tools/package.js Build zips for sideloading or store upload
+tools/           icon generator, screenshot capture, packaging
 ```
 
 ## Development
 
 ```bash
 node test/crypto.test.js        # unit tests
-node tools/package.js           # dist/profilelock-transfer.zip  (keeps manifest "key" → stable ID)
-node tools/package.js --store    # dist/profilelock-store.zip     (strips "key"; the store assigns the ID)
+node tools/package.js           # dist/nightlatch-transfer.zip  (keeps manifest "key" → stable ID)
+node tools/package.js --store    # dist/nightlatch-store.zip     (strips "key"; the store assigns the ID)
 ```
 
 `manifest.json` contains a `key` field that pins the extension ID so the same

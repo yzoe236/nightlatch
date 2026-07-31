@@ -1,4 +1,4 @@
-/* ProfileLock crypto — PBKDF2 password hashing + brute-force backoff.
+/* Nightlatch crypto — PBKDF2 password hashing + brute-force backoff.
  * Classic script, no modules: importScripts() in the service worker,
  * <script src> in extension pages, require() under Node for unit tests.
  *
@@ -60,5 +60,5 @@
     return Math.min(300000, 30000 * Math.pow(2, fails - 5));
   }
 
-  root.ProfileLockCrypto = { hashPassword: hashPassword, verifyPassword: verifyPassword, backoffMs: backoffMs, ITERATIONS: ITERATIONS };
+  root.NightlatchCrypto = { hashPassword: hashPassword, verifyPassword: verifyPassword, backoffMs: backoffMs, ITERATIONS: ITERATIONS };
 })(typeof self !== 'undefined' ? self : globalThis);
