@@ -1,0 +1,9 @@
+# NEVER commit the extension signing key — anyone holding it can publish
+# builds that Chrome accepts as this extension.
+dev-key.pem
+*.pem
+
+dist/
+node_modules/
+.DS_Store
+Thumbs.db

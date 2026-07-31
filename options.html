@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ProfileLock · Settings</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 14px/1.6 system-ui, "Segoe UI", sans-serif; margin: 0 auto; max-width: 620px; padding: 24px 16px 60px; }
+  h1 { font-size: 20px; }
+  h2 { font-size: 15px; margin: 26px 0 8px; }
+  .card { border: 1px solid rgba(128,128,128,.35); border-radius: 10px; padding: 14px 16px; }
+  label { display: block; font-size: 12px; opacity: .8; margin-top: 10px; }
+  input, textarea, select { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 7px; margin-top: 3px;
+          border: 1px solid rgba(128,128,128,.5); background: transparent; color: inherit; font-size: 14px; font-family: inherit; }
+  input[type="number"] { width: 90px; text-align: center; }
+  input[type="checkbox"] { width: auto; }
+  select { width: auto; min-width: 180px; }
+  textarea { min-height: 90px; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  button { margin-top: 14px; padding: 8px 18px; border-radius: 8px; border: 0; background: #1a73e8; color: #fff;
+           font-size: 14px; cursor: pointer; }
+  .status { font-size: 13px; margin-left: 10px; }
+  .status.ok { color: #188038; }
+  .status.bad { color: #d93025; }
+  .row { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+  .row label { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 13px; opacity: .9; }
+  .hint { font-size: 12px; opacity: .65; margin-top: 6px; }
+  .devbadge { font-size: 10px; font-weight: 700; color: #1a73e8; border: 1px solid #1a73e8; border-radius: 4px; padding: 0 5px; vertical-align: middle; }
+  .dim[data-dim="1"] { opacity: .55; }
+  .honest { font-size: 13px; opacity: .85; border-left: 3px solid #f9ab00; padding: 4px 12px; margin-top: 26px; }
+  .honest b { display: block; margin-bottom: 4px; }
+  .honest ul { margin: 6px 0 0; padding-left: 18px; }
+  .honest li { margin-bottom: 5px; }
+  footer { margin-top: 30px; font-size: 12px; opacity: .55; }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+  <h1>🔒 ProfileLock Settings</h1>
+
+  <h2>Password</h2>
+  <div class="card">
+    <label id="curLabel" hidden>Current password<input id="cur" type="password" autocomplete="off"></label>
+    <label>New password (min 4 characters)<input id="next" type="password" autocomplete="off"></label>
+    <label>Repeat new password<input id="confirm" type="password" autocomplete="off"></label>
+    <button id="savePw">Save password</button><span class="status" id="pwStatus"></span>
+  </div>
+
+  <h2>Auto-lock</h2>
+  <div class="card">
+    <div class="row">
+      <label><input type="checkbox" id="idleAutolock" checked> <b>Idle auto-lock on this computer</b>
+        <span class="devbadge">THIS DEVICE</span></label>
+    </div>
+    <div class="hint">Turn this off on machines only you use (e.g. your home PC). It is a per-computer setting —
+      it does <b>not</b> sync, so switching it off here never weakens the lock on your lab or office machine.
+      <b>Screen lock (Win+L) and browser restart still lock the profile</b> either way.</div>
+    <div class="row dim" id="autolockRow">
+      <span>Lock after this profile is untouched for</span>
+      <input id="autolock" type="number" min="1" max="480" step="1" value="5">
+      <span>minutes</span>
+    </div>
+    <div class="hint" id="autolockHint"></div>
+    <div class="row">
+      <label><input type="checkbox" id="strict"> While locked, also block data pages
+        (Settings / History / Downloads / Bookmarks / Password Manager / New Tab)</label>
+    </div>
+    <div class="row"><span class="status" id="cfgStatus"></span></div>
+  </div>
+
+  <h2>Lock screen theme</h2>
+  <div class="card">
+    <div class="row"><select id="theme"></select></div>
+    <div class="hint">Applies to the lock overlay and the lock landing page.</div>
+  </div>
+
+  <h2>Protected websites</h2>
+  <div class="card">
+    <label>One hostname per line — these sites ask for your password again (once per browser run), even while the profile is unlocked.
+      <textarea id="sites" placeholder="mail.google.com&#10;chase.com&#10;facebook.com"></textarea>
+    </label>
+    <button id="saveSites">Save protected sites</button><span class="status" id="sitesStatus"></span>
+  </div>
+
+  <div class="honest">
+    <b>Honest security notes (please read once)</b>
+    <ul>
+      <li><b>This is a curtain against casual snooping, not a vault.</b> Anyone who opens chrome://extensions and
+        disables the extension gets past it — true of every product in this category. Real security on a shared
+        machine is <b>Win+L</b> or separate OS accounts; this is a second curtain on top.</li>
+      <li><b>Lock state lives only in this computer's memory</b> (chrome.storage.session): it never syncs, and a
+        browser restart always returns to locked. <b>Unlocking at home never unlocks the lab machine.</b></li>
+      <li>Only a salted hash of your password is stored (PBKDF2, 310k iterations). Settings sync with your account;
+        each machine still locks and unlocks independently.</li>
+      <li><b>Forgot your password?</b> Remove the extension at chrome://extensions and reinstall. We deliberately do
+        not block that page, so you can never lock yourself out for good. Nothing readable is stored — only the hash.</li>
+    </ul>
+  </div>
+
+  <footer>
+    ProfileLock is free and open source (MIT). No accounts, no telemetry, no network requests — read the code:
+    <a id="repo" href="https://github.com/" target="_blank" rel="noopener">github.com</a>
+  </footer>
+
+  <script src="themes.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
