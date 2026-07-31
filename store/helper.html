@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nightlatch 上架填表助手</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.65 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; max-width: 860px;
+         margin: 0 auto; padding: 28px 20px 90px; }
+  h1 { font-size: 22px; margin-bottom: 2px; }
+  .lead { opacity: .65; font-size: 14px; margin-bottom: 6px; }
+  .prog { position: sticky; top: 0; background: Canvas; padding: 10px 0 12px; z-index: 10;
+          border-bottom: 1px solid rgba(128,128,128,.25); margin-bottom: 22px; }
+  .bar { height: 7px; border-radius: 4px; background: rgba(128,128,128,.22); overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; background: #1a73e8; transition: width .25s; }
+  .prog span { font-size: 13px; opacity: .7; }
+  .step { border: 1px solid rgba(128,128,128,.3); border-radius: 11px; padding: 15px 18px; margin-bottom: 14px; }
+  .step.done { border-color: rgba(24,128,56,.55); background: rgba(24,128,56,.05); }
+  .step h2 { font-size: 16px; margin: 0 0 6px; display: flex; align-items: center; gap: 9px; }
+  .step h2 input { width: 17px; height: 17px; flex: none; }
+  .step .why { font-size: 13px; opacity: .72; margin: 0 0 10px 26px; }
+  .step .body { margin-left: 26px; }
+  .warn { border-left: 3px solid #f9ab00; padding: 7px 12px; background: rgba(249,171,0,.08);
+          border-radius: 0 7px 7px 0; font-size: 13.5px; margin: 9px 0; }
+  .field { margin: 12px 0; }
+  .field .lbl { font-size: 12.5px; font-weight: 600; opacity: .75; margin-bottom: 4px;
+                display: flex; align-items: center; gap: 8px; }
+  .field .lbl .pick { font-weight: 400; opacity: .7; }
+  pre { margin: 0; background: rgba(128,128,128,.1); border: 1px solid rgba(128,128,128,.25);
+        border-radius: 8px; padding: 10px 12px; font-family: ui-monospace, Consolas, monospace;
+        font-size: 12.5px; white-space: pre-wrap; max-height: 190px; overflow: auto; }
+  button.copy { border: 0; background: #1a73e8; color: #fff; border-radius: 6px; padding: 4px 12px;
+                font-size: 12.5px; cursor: pointer; font-family: inherit; }
+  button.copy.ok { background: #188038; }
+  .path { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px;
+          background: rgba(128,128,128,.12); border-radius: 5px; padding: 2px 7px; }
+  ul { margin: 8px 0; padding-left: 20px; }
+  li { margin-bottom: 5px; }
+  a { color: #1a73e8; }
+  .shots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-top: 9px; }
+  .shots figure { margin: 0; }
+  .shots img { width: 100%; border-radius: 6px; border: 1px solid rgba(128,128,128,.35); display: block; }
+  .shots figcaption { font-size: 11px; opacity: .65; margin-top: 3px; text-align: center; }
+</style>
+</head>
+<body>
+
+<h1>🔒 Nightlatch 上架填表助手</h1>
+<div class="lead">每个字段点「复制」→ 到开发者后台粘贴。勾选框会记住进度（存在本机浏览器里）。</div>
+<div class="prog">
+  <div class="bar"><i id="fill"></i></div>
+  <span id="cnt"></span>
+</div>
+
+<div class="step" data-k="s0">
+  <h2><input type="checkbox"> 0 · 确认账号与素材位置</h2>
+  <div class="body">
+    <ul>
+      <li>后台用 <b>yzoe314</b> 那个 Gmail 登录（邮箱以后不可改，审核通知都发这里）</li>
+      <li>所有素材都在 <span class="path">D:\dev\nightlatch\</span></li>
+    </ul>
+  </div>
+</div>
+
+<div class="step" data-k="s1">
+  <h2><input type="checkbox"> 1 · Account 页声明 non-trader</h2>
+  <p class="why">这一步保护你的隐私，别跳过。</p>
+  <div class="body">
+    <div class="warn">欧盟规定要求「经营者(trader)」在商店页<b>公开姓名、住址、电话</b>。免费扩展无需经营者身份 →
+      选 <b>non-trader</b>，你的家庭住址就不会被公示。（将来真收费时再改，并且用商业地址。）</div>
+  </div>
+</div>
+
+<div class="step" data-k="s2">
+  <h2><input type="checkbox"> 2 · 上传安装包</h2>
+  <div class="body">
+    <p><b>Items → + New item</b>，上传：</p>
+    <div class="field">
+      <div class="lbl">安装包路径 <button class="copy" data-copy="path-zip">复制路径</button></div>
+      <pre id="path-zip">D:\dev\nightlatch\dist\nightlatch-store.zip</pre>
+    </div>
+    <p style="font-size:13.5px;opacity:.75">解析后会自动读出名称 <code>Nightlatch — Profile Lock for Google Chrome™</code>，正常。</p>
+  </div>
+</div>
+
+<div class="step" data-k="s3">
+  <h2><input type="checkbox"> 3 · Store listing（商品详情）</h2>
+  <div class="body">
+
+    <div class="field">
+      <div class="lbl">Summary / 摘要 <span class="pick">（≤132 字符）</span> <button class="copy" data-copy="f-summary">复制</button></div>
+      <pre id="f-summary">Password-lock your browser profile on shared computers. The lock never syncs, so unlocking at home leaves the shared PC locked.</pre>
+    </div>
+
+    <div class="field">
+      <div class="lbl">Description / 详细说明 <button class="copy" data-copy="f-desc">复制全文</button></div>
+      <pre id="f-desc">Nightlatch puts a password on your browser profile — and, unlike other lock extensions, it keeps the lock where it belongs: on the computer you locked.
+
+WHY THIS EXISTS
+
+If you use a shared computer — a lab machine, an office workstation, a front-desk PC, a family desktop — you are one unattended moment away from someone reading your mail, your history, your saved sessions and everything else your signed-in profile can reach. Locking the whole operating system is the right answer, and everyone forgets.
+
+So people install a browser lock. But several of them keep the "unlocked" flag in synced storage, which follows your Google Account across machines. The result is a quiet failure exactly where it hurts:
+
+  You lock the shared lab computer and go home. At home you unlock your own browser — and the lab machine unlocks itself too, while you are nowhere near it.
+
+Nightlatch was built to fix that specific bug. Lock state lives in per-session, per-device storage that is never replicated. Your password and preferences sync so you set them once; the lock itself never travels.
+
+WHAT IT DOES
+
+• Full-page lock screen. Drawn before the page paints, so nothing flashes into view. It traps focus and swallows clicks, keystrokes, scrolling and copying until the password goes in.
+
+• Idle auto-lock that measures the right thing. The timer counts inactivity in YOUR Chrome profile, not system-wide idle. On a shared machine, someone else working under their own profile keeps the computer busy — but it will not keep your profile unlocked. A tab playing audio counts as in use, so a video call is never interrupted.
+
+• Locks on OS screen lock (Win+L) and on every browser restart. Restarting always returns to locked.
+
+• Per-computer switch. Turn idle auto-lock off on a machine only you use. That switch does not sync, so relaxing your home PC never weakens the shared one.
+
+• Strict mode. While locked, Settings, History, Downloads, Bookmarks, the Password Manager and the New Tab page redirect to the lock screen — pages an overlay cannot cover.
+
+• Protected websites. List hostnames such as your bank or webmail; they ask for the password again once per browser run, even while the profile is unlocked.
+
+• Failed-attempt report. When you unlock, it tells you how many wrong passwords were tried while you were away.
+
+• Brute-force cooldown: four attempts, then a delay that starts at 30 seconds and doubles to a five-minute cap.
+
+• Manual lock any time with Ctrl+Shift+L or the toolbar button. Four lock-screen themes.
+
+PRIVACY
+
+No account. No telemetry. No server. Zero network requests — search the source for fetch, XMLHttpRequest or WebSocket and you will find none. Your password is never stored; only a salted PBKDF2-SHA256 hash with 310,000 iterations. Broad site access is requested for exactly one reason: the lock screen has to be able to cover whatever page is open.
+
+HONEST ABOUT WHAT IT IS NOT
+
+This is a curtain against casual snooping, not a vault. Anyone who opens chrome://extensions and turns the extension off gets past it — that is true of every extension in this category, and Nightlatch deliberately leaves that page reachable so you can never lock yourself out permanently. Someone with access to the same operating-system account can also read the browser profile straight off the disk; no extension can prevent that.
+
+On a shared computer the real baseline is locking the OS (Win+L) or giving each person their own OS account. Nightlatch is the second curtain, for the many times you forget.
+
+FREE AND OPEN SOURCE
+
+Every feature is free. There is no paid tier and nothing is held back. The complete source is published under the MIT licence at https://github.com/yzoe236/nightlatch — please read it before you type a password into it. That is the point of an open lock.
+
+---
+Google Chrome is a trademark of Google LLC. Use of this trademark is subject to Google Permissions. Nightlatch is an independent project and is not affiliated with or endorsed by Google LLC.</pre>
+      <div class="warn">最后那行<b>商标归属声明必须保留</b>——这是标题里能出现 "Google Chrome™" 的合规前提。</div>
+    </div>
+
+    <div class="field">
+      <div class="lbl">Category / 类别</div>
+      <pre>Privacy &amp; Security</pre>
+    </div>
+
+    <div class="field">
+      <div class="lbl">Store icon <span class="pick">（128×128）</span> <button class="copy" data-copy="path-icon">复制路径</button></div>
+      <pre id="path-icon">D:\dev\nightlatch\icons\icon128.png</pre>
+    </div>
+
+    <div class="field">
+      <div class="lbl">Screenshots <span class="pick">（4 张，按此顺序上传）</span> <button class="copy" data-copy="path-shots">复制文件夹路径</button></div>
+      <pre id="path-shots">D:\dev\nightlatch\store\</pre>
+      <div class="shots">
+        <figure><img src="screenshot-1-lockscreen.png" alt="1"><figcaption>1 锁屏</figcaption></figure>
+        <figure><img src="screenshot-2-per-device.png" alt="2"><figcaption>2 跨设备（主打）</figcaption></figure>
+        <figure><img src="screenshot-3-settings.png" alt="3"><figcaption>3 每机设置</figcaption></figure>
+        <figure><img src="screenshot-4-privacy.png" alt="4"><figcaption>4 隐私</figcaption></figure>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="step" data-k="s4">
+  <h2><input type="checkbox"> 4 · Privacy practices（最容易被打回的一页）</h2>
+  <div class="body">
+
+    <div class="field">
+      <div class="lbl">Single purpose / 单一用途 <button class="copy" data-copy="f-purpose">复制</button></div>
+      <pre id="f-purpose">Lock the user's Chrome profile behind a password on shared computers, and keep that lock state confined to the device it was set on.</pre>
+    </div>
+
+    <div class="field">
+      <div class="lbl">storage 权限理由 <button class="copy" data-copy="p-storage">复制</button></div>
+      <pre id="p-storage">Stores the salted password hash, the user's preferences, and the per-device lock state. All of it stays in Chrome's extension storage; none of it is transmitted.</pre>
+    </div>
+
+    <div class="field">
+      <div class="lbl">idle 权限理由 <button class="copy" data-copy="p-idle">复制</button></div>
+      <pre id="p-idle">Used only to detect that the operating system screen has been locked (Win+L), which must immediately lock the profile. System-wide idle state is intentionally not used.</pre>
+    </div>
+
+    <div class="field">
+      <div class="lbl">tabs 权限理由 <button class="copy" data-copy="p-tabs">复制</button></div>
+      <pre id="p-tabs">The lock overlay must be applied to every open tab at once, and while locked the extension redirects browser pages that a content script cannot cover (Settings, History, Downloads, Bookmarks, Password Manager, New Tab) to its own lock page. Only tab IDs and URLs are inspected for this; nothing is stored or sent.</pre>
+    </div>
+
+    <div class="field">
+      <div class="lbl">scripting 权限理由 <button class="copy" data-copy="p-scripting">复制</button></div>
+      <pre id="p-scripting">Injects the lock overlay into tabs that were already open when the extension was installed, enabled, or updated — those tabs have no content script yet and would otherwise stay uncovered.</pre>
+    </div>
+
+    <div class="field">
+      <div class="lbl">alarms 权限理由 <button class="copy" data-copy="p-alarms">复制</button></div>
+      <pre id="p-alarms">Runs a one-minute timer that checks whether this profile has been idle long enough to auto-lock. Service workers cannot hold a long-lived timer without it.</pre>
+    </div>
+
+    <div class="field">
+      <div class="lbl">Host permissions 理由 <span class="pick">（&lt;all_urls&gt;，审核重点）</span> <button class="copy" data-copy="p-host">复制</button></div>
+      <pre id="p-host">The lock screen must be able to cover whatever page the user happens to have open, on any site. The content script only paints an overlay and blocks input events; it never reads, stores or transmits page content, and the extension makes no network requests at all.</pre>
+    </div>
+
+    <div class="field">
+      <div class="lbl">Privacy policy URL <button class="copy" data-copy="f-privacy">复制</button></div>
+      <pre id="f-privacy">https://yzoe236.github.io/nightlatch/privacy.html</pre>
+    </div>
+
+    <div class="warn">
+      <b>Remote code</b> → 选 <b>No</b>（所有代码都在包内）<br>
+      <b>Data usage</b> → 每一类都勾「<b>不收集</b>」，下方三条合规声明全部勾选
+    </div>
+  </div>
+</div>
+
+<div class="step" data-k="s5">
+  <h2><input type="checkbox"> 5 · 可见性选 Unlisted → 提交审核</h2>
+  <div class="body">
+    <p><b>Visibility → Unlisted（不公开列出）</b> → <b>Submit for review</b></p>
+    <ul>
+      <li>Unlisted 走<b>同样的完整审核</b>，但只有拿到链接的人能装</li>
+      <li>等你两台电脑验证完（家里解锁后实验室仍锁着），再改 Public，<b>改可见性不用重新审核</b></li>
+      <li>审核一般 2–7 天；新账号 + 宽权限可能拖到 1–3 周</li>
+      <li>⚠️ <b>千万别取消重交</b>，那会重新排队</li>
+    </ul>
+  </div>
+</div>
+
+<div class="step" data-k="s6">
+  <h2><input type="checkbox"> 6 · 提交完成，把链接发我</h2>
+  <div class="body">
+    <p>通过后把商店链接发我，我替换 README 和安装文档里的占位链接。</p>
+    <p>被驳回也发我——若是名称问题，用备用标题
+      <span class="path">Nightlatch — Profile Lock for Shared Computers</span> 改完重交即可，其他都不用动。</p>
+  </div>
+</div>
+
+<script>
+  // copy buttons
+  document.querySelectorAll('button.copy').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var src = document.getElementById(b.dataset.copy);
+      navigator.clipboard.writeText(src.textContent).then(function () {
+        var old = b.textContent;
+        b.textContent = '✓ 已复制';
+        b.classList.add('ok');
+        setTimeout(function () { b.textContent = old; b.classList.remove('ok'); }, 1400);
+      });
+    });
+  });
+
+  // progress, persisted locally
+  var steps = [].slice.call(document.querySelectorAll('.step'));
+  function paint() {
+    var done = 0;
+    steps.forEach(function (s) {
+      var cb = s.querySelector('input');
+      s.classList.toggle('done', cb.checked);
+      if (cb.checked) done++;
+    });
+    document.getElementById('fill').style.width = (done / steps.length * 100) + '%';
+    document.getElementById('cnt').textContent = '进度 ' + done + ' / ' + steps.length +
+      (done === steps.length ? ' — 全部完成 🎉' : '');
+  }
+  steps.forEach(function (s) {
+    var cb = s.querySelector('input');
+    var key = 'nl-submit-' + s.dataset.k;
+    cb.checked = localStorage.getItem(key) === '1';
+    cb.addEventListener('change', function () {
+      localStorage.setItem(key, cb.checked ? '1' : '0');
+      paint();
+    });
+  });
+  paint();
+</script>
+</body>
+</html>
