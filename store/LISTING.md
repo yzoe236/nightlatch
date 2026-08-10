@@ -60,6 +60,8 @@ WHAT IT DOES
 
 • Per-computer switch. Turn idle auto-lock off on a machine only you use. That switch does not sync, so relaxing your home PC never weakens the shared one.
 
+• A different timer on every computer. Five minutes on the shared lab machine, an hour in your private office. Each computer holds its own number, and any computer you have not customised follows your account default, so a machine you just set up is protected from the first minute.
+
 • Strict mode. While locked, Settings, History, Downloads, Bookmarks, the Password Manager and the New Tab page redirect to the lock screen — pages an overlay cannot cover.
 
 • Protected websites. List hostnames such as your bank or webmail; they ask for the password again once per browser run, even while the profile is unlocked.

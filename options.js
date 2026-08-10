@@ -14,13 +14,27 @@
     $('theme').appendChild(opt);
   });
 
+  // The synced default, and this device's own timer (null = follow the default).
+  let storedMin = 5;
+  let deviceMin = null;
+
   function paintTimerRow() {
     const idleOn = $('idleAutolock').checked;
     $('autolockRow').dataset.dim = idleOn ? '0' : '1';
+    $('deviceTimerRow').dataset.dim = idleOn ? '0' : '1';
     $('autolock').disabled = !idleOn;
+    $('deviceTimer').disabled = !idleOn;
     $('autolockHint').textContent = idleOn
       ? 'Counts activity in THIS Chrome profile only — other people using the computer never reset your timer. A tab playing audio counts as in use.'
       : 'Idle auto-lock is off on this computer. The profile still locks on OS screen lock, on browser restart, and with Ctrl+Shift+L.';
+    paintTimerScope();
+  }
+
+  // Says plainly which machines the number above is about to change.
+  function paintTimerScope() {
+    $('deviceTimerHint').textContent = $('deviceTimer').checked
+      ? 'This computer locks after ' + $('autolock').value + ' minutes. Every other computer keeps the account default of ' + storedMin + ' minutes.'
+      : 'Following the account default of ' + storedMin + ' minutes. Changing the number changes it on every computer that has no number of its own.';
   }
 
   function load() {
@@ -28,7 +42,10 @@
       if (chrome.runtime.lastError || !resp) return;
       $('curLabel').hidden = !resp.hasPassword;
       $('idleAutolock').checked = resp.idleAutolock !== false;
-      $('autolock').value = String(resp.storedAutolockMin || 5);
+      storedMin = resp.storedAutolockMin || 5;
+      deviceMin = typeof resp.deviceAutolockMin === 'number' ? resp.deviceAutolockMin : null;
+      $('deviceTimer').checked = deviceMin !== null;
+      $('autolock').value = String(deviceMin !== null ? deviceMin : storedMin);
       $('strict').checked = !!resp.strict;
       $('theme').value = resp.theme || 'dark';
       $('sites').value = (resp.sites || []).join('\n');
@@ -65,17 +82,33 @@
     setTimeout(function () { el.textContent = ''; }, 2500);
   }
 
-  function saveTimerStrict() {
+  function readMin() {
     let min = parseInt($('autolock').value, 10);
     if (isNaN(min) || min < 1) min = 1;
     if (min > 480) min = 480;
     $('autolock').value = String(min);
-    chrome.runtime.sendMessage({ type: 'PLK_SET_CFG', autolockMin: min, strict: $('strict').checked }, function (resp) {
+    return min;
+  }
+
+  // One number field, two destinations. The checkbox below it decides which.
+  $('autolock').onchange = function () {
+    const min = readMin();
+    const toDevice = $('deviceTimer').checked;
+    const msg = toDevice
+      ? { type: 'PLK_SET_DEVICE', autolockMin: min }
+      : { type: 'PLK_SET_CFG', autolockMin: min };
+    chrome.runtime.sendMessage(msg, function (resp) {
+      if (resp && resp.ok) { if (toDevice) deviceMin = min; else storedMin = min; }
+      cfgResult($('cfgStatus'), resp);
+      paintTimerScope();
+    });
+  };
+
+  $('strict').onchange = function () {
+    chrome.runtime.sendMessage({ type: 'PLK_SET_CFG', strict: $('strict').checked }, function (resp) {
       cfgResult($('cfgStatus'), resp);
     });
-  }
-  $('autolock').onchange = saveTimerStrict;
-  $('strict').onchange = saveTimerStrict;
+  };
 
   // Per-device (storage.local) — deliberately never synced.
   $('idleAutolock').onchange = function () {
@@ -83,6 +116,23 @@
       cfgResult($('cfgStatus'), resp);
       if (resp && !resp.ok) $('idleAutolock').checked = !$('idleAutolock').checked; // revert on refusal
       paintTimerRow();
+    });
+  };
+
+  // Claiming a per-device timer pins whatever is showing; releasing it snaps
+  // the field back to the synced default so what you see is what applies.
+  $('deviceTimer').onchange = function () {
+    const claim = $('deviceTimer').checked;
+    const min = claim ? readMin() : null;
+    chrome.runtime.sendMessage({ type: 'PLK_SET_DEVICE', autolockMin: min }, function (resp) {
+      if (resp && resp.ok) {
+        deviceMin = min;
+        if (!claim) $('autolock').value = String(storedMin);
+      } else {
+        $('deviceTimer').checked = !claim; // revert on refusal
+      }
+      cfgResult($('cfgStatus'), resp);
+      paintTimerScope();
     });
   };
 

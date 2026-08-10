@@ -47,9 +47,9 @@ splits storage by intent so that cannot happen:
 | Data | Stored in | Behaviour |
 |---|---|---|
 | Password (PBKDF2-SHA256 hash, 310k iterations, random salt) | `storage.sync` | Follows your account — set the password once, works everywhere |
-| Shared preferences (timer, theme, protected sites) | `storage.sync` | One set of preferences on every machine |
+| Shared preferences (default timer, theme, protected sites) | `storage.sync` | The baseline every machine starts from |
 | **Lock state** | **`storage.session`** | **Per device, per browser run. Never synced. Cleared on restart → always starts locked** |
-| **Per-device switches**, failed-attempt log | `storage.local` | Per device. Never synced |
+| **Per-device switches and timer**, failed-attempt log | `storage.local` | Per device. Never synced. Overrides the synced default when set |
 
 Unlocking at home can never unlock the lab machine.
 
@@ -64,6 +64,10 @@ Unlocking at home can never unlock the lab machine.
 - **Locks on OS screen lock (Win+L) and on every browser restart.**
 - **Per-device switch** to turn idle auto-lock off on machines only you use. It
   does not sync, so relaxing your home PC never weakens the shared one.
+- **Per-device timer.** Each computer can hold its own number of minutes: 5 in a
+  shared lab, 60 in a private office. A machine with no number of its own follows
+  the synced default, which is also what a freshly installed profile inherits, so
+  a new computer is never left unprotected.
 - **Strict mode** — while locked, `chrome://settings`, history, downloads,
   bookmarks, the password manager and the new-tab page redirect to the lock screen
   (content scripts cannot cover those pages).

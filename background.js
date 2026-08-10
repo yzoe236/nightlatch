@@ -46,14 +46,24 @@ async function getLocalPrefs() {
 async function setLocalPrefs(patch) {
   const p = await getLocalPrefs();
   const next = Object.assign({}, p, patch);
+  // null clears a key rather than storing it: that is how a device drops its
+  // own timer and goes back to following the synced default.
+  Object.keys(next).forEach(function (k) { if (next[k] === null) delete next[k]; });
   await chrome.storage.local.set({ plk_device: next });
   return next;
 }
 
 // Minutes that actually apply on THIS device. 0 = idle auto-lock off (screen
 // lock and browser restart still lock — those are non-negotiable).
+//
+// Precedence: this device's own timer, then the synced default, then the
+// built-in. The device layer has to win, for the same reason lock state is
+// per-device: relaxing the timer on a personal machine must never stretch the
+// timer on a shared lab machine. cfg.autolockMin stays the value a freshly
+// installed profile inherits, so a new machine is never left unprotected.
 function effectiveAutolockMin(cfg, devicePrefs) {
   if (devicePrefs && devicePrefs.idleAutolock === false) return 0;
+  if (devicePrefs && typeof devicePrefs.autolockMin === 'number') return devicePrefs.autolockMin;
   return cfg && typeof cfg.autolockMin === 'number' ? cfg.autolockMin : DEFAULT_AUTOLOCK_MIN;
 }
 
@@ -197,6 +207,7 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
           idleAutolock: dev.idleAutolock !== false,
           autolockMin: effectiveAutolockMin(c, dev),
           storedAutolockMin: c && typeof c.autolockMin === 'number' ? c.autolockMin : DEFAULT_AUTOLOCK_MIN,
+          deviceAutolockMin: typeof dev.autolockMin === 'number' ? dev.autolockMin : null,
           strict: c ? c.strict !== false : true,
           theme: (c && c.theme) || 'dark',
           sites: (c && Array.isArray(c.sites)) ? c.sites : [],
@@ -267,6 +278,12 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
         if (await isLocked()) { sendResponse({ ok: false, msg: 'locked' }); return; }
         const patch = {};
         if (typeof msg.idleAutolock === 'boolean') patch.idleAutolock = msg.idleAutolock;
+        // Same 1–480 clamp as the synced timer. null drops the override.
+        if (typeof msg.autolockMin === 'number') {
+          patch.autolockMin = Math.max(1, Math.min(480, Math.round(msg.autolockMin)));
+        } else if (msg.autolockMin === null) {
+          patch.autolockMin = null;
+        }
         await setLocalPrefs(patch);
         sendResponse({ ok: true });
         return;
