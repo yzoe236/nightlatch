@@ -1,15 +1,14 @@
 # Installing Nightlatch
 
 There are two ways to install. Pick **A** if you just want to use it; pick **B** if you want to run
-the code you can see, or the store listing is not available to you yet.
+the code you can see.
 
 ---
 
 ## A. From the Chrome Web Store (recommended)
 
-1. Open the Chrome Web Store and search for **Nightlatch**, or go straight to the listing:
-   <!-- STORE_URL -->
-   *(link will be added here once the listing is published)*
+1. Open the listing:
+   **<https://chromewebstore.google.com/detail/nightlatch-%E2%80%94-profile-lock/mphdffkcmeklajdapjcgiojjhmikheif>**
 2. Click **Add to Chrome** → **Add extension**.
 3. The settings page opens on first run. Set a password (minimum 4 characters).
 4. Click the puzzle-piece icon in the toolbar and **pin** Nightlatch so you can see the 🔒 badge.

@@ -10,7 +10,20 @@
 </p>
 
 <p align="center">
-  <a href="docs/INSTALL.md">Install</a> ·
+  <a href="https://chromewebstore.google.com/detail/nightlatch-%E2%80%94-profile-lock/mphdffkcmeklajdapjcgiojjhmikheif">
+    <img src="https://img.shields.io/badge/Chrome%20Web%20Store-Install-4285F4?logo=googlechrome&logoColor=white" alt="Install from the Chrome Web Store">
+  </a>
+  <a href="https://github.com/yzoe236/nightlatch/releases/latest">
+    <img src="https://img.shields.io/github/v/release/yzoe236/nightlatch?label=release" alt="Latest release">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/licence-MIT-green" alt="MIT licence">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://chromewebstore.google.com/detail/nightlatch-%E2%80%94-profile-lock/mphdffkcmeklajdapjcgiojjhmikheif"><b>Install from the Chrome Web Store</b></a> ·
+  <a href="docs/INSTALL.md">Install from source</a> ·
   <a href="SECURITY.md">Threat model</a> ·
   <a href="https://yzoe236.github.io/nightlatch/privacy.html">Privacy policy</a> ·
   <a href="LICENSE">MIT</a>
@@ -94,10 +107,9 @@ Full threat model: [SECURITY.md](SECURITY.md).
 
 ### From the Chrome Web Store
 
-Search the store for **Nightlatch** and click *Add to Chrome*. Chrome keeps it updated
-and installs it on your other signed-in computers for you.
+**[Nightlatch on the Chrome Web Store](https://chromewebstore.google.com/detail/nightlatch-%E2%80%94-profile-lock/mphdffkcmeklajdapjcgiojjhmikheif)** → *Add to Chrome*.
 
-<!-- STORE_URL --> *(listing link goes here once published)*
+Chrome keeps it updated and installs it on your other signed-in computers for you.
 
 ### From source (run the code you can read)
 
