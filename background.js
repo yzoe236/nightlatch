@@ -324,6 +324,11 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
         if (!c || !c.rcHash) { sendResponse({ ok: false, msg: 'No recovery code is set on this profile' }); return; }
         // Shares the cooldown pool with the password door, so an attacker
         // cannot shop between the two.
+        // Shape of the request is checked before the credential is, so a
+        // malformed password can never produce a different answer depending on
+        // whether the code was right. Nothing is learnable from the error text.
+        const next = String(msg.next || '');
+        if (next.length < 4) { sendResponse({ ok: false, msg: 'New password must be at least 4 characters' }); return; }
         const cd = await checkCooldown();
         if (cd.blocked) { sendResponse({ ok: false, waitMs: cd.waitMs, cooldown: true }); return; }
         const typed = PLK.normalizeRecoveryCode(msg.code);
@@ -334,8 +339,6 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
           sendResponse({ ok: false, msg: 'That recovery code is not valid', tries: res.tries, waitMs: res.waitMs });
           return;
         }
-        const next = String(msg.next || '');
-        if (next.length < 4) { sendResponse({ ok: false, msg: 'New password must be at least 4 characters' }); return; }
         const rec = await PLK.hashPassword(next);
         const code = PLK.makeRecoveryCode();
         const rcRec = await PLK.hashPassword(PLK.normalizeRecoveryCode(code));
