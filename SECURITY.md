@@ -23,7 +23,7 @@ times you forget.
 
 ## Design choices that matter
 
-- **Passwords are never stored.** Only a PBKDF2-SHA256 hash (310,000 iterations,
+- **Passwords are never stored.** Only a PBKDF2-SHA256 hash (600,000 iterations,
   16-byte random salt) is kept, in `chrome.storage.sync`. Verification is
   constant-time.
 - **Lock state never syncs.** It lives in `chrome.storage.session` — per device,

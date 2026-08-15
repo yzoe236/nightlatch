@@ -86,23 +86,44 @@ async function getReport() {
 }
 async function saveReport(r) { await chrome.storage.local.set({ plk_report: r }); }
 
-// Shared wrong-password handling (global unlock and site unlock use one
-// cooldown pool so brute force can't shop between the two doors).
-async function checkCooldown() {
-  const s = await chrome.storage.session.get({ plk_fail: { n: 0, until: 0 } });
-  const f = s.plk_fail;
-  const now = Date.now();
-  if (f.until && now < f.until) return { blocked: true, waitMs: f.until - now };
-  return { blocked: false, f: f, now: now };
+// Shared wrong-secret handling. Every door that checks a credential (unlock,
+// site unlock, recovery, and the current-password field when changing it)
+// draws on one cooldown pool, so brute force cannot shop between them.
+//
+// Reading the counter, verifying, and writing the counter back straddle
+// awaits, so a burst of concurrent guesses could each read the same
+// pre-increment value and collect its own free try. Every check queues on
+// this chain instead, which both closes that race and serialises a burst
+// rather than letting it run in parallel.
+let credentialGate = Promise.resolve();
+
+// verify() must resolve to a boolean. Resolves to one of:
+//   { blocked: true, waitMs }            cooling down, nothing was checked
+//   { ok: true, now }                    correct
+//   { ok: false, tries, waitMs }         wrong, and now counted
+function guardedVerify(verify) {
+  const run = credentialGate.then(async function () {
+    const s = await chrome.storage.session.get({ plk_fail: { n: 0, until: 0 } });
+    const f = s.plk_fail;
+    const now = Date.now();
+    if (f.until && now < f.until) return { blocked: true, waitMs: f.until - now };
+    if (await verify()) return { ok: true, now: now };
+    const n = (f.n || 0) + 1;
+    const wait = PLK.backoffMs(n);
+    await chrome.storage.session.set({ plk_fail: { n: n, until: wait ? now + wait : 0 } });
+    const r = await getReport();
+    r.fails += 1; r.lastFailAt = now;
+    await saveReport(r);
+    return { ok: false, tries: n, waitMs: wait };
+  });
+  // Keep the chain alive even if a verify throws, or one bad call would wedge
+  // every future credential check.
+  credentialGate = run.then(function () {}, function () {});
+  return run;
 }
-async function recordFail(f, now) {
-  const n = (f.n || 0) + 1;
-  const wait = PLK.backoffMs(n);
-  await chrome.storage.session.set({ plk_fail: { n: n, until: wait ? now + wait : 0 } });
-  const r = await getReport();
-  r.fails += 1; r.lastFailAt = now;
-  await saveReport(r);
-  return { tries: n, waitMs: wait };
+
+async function clearFails() {
+  await chrome.storage.session.set({ plk_fail: { n: 0, until: 0 } });
 }
 
 // ------------------------------------------------------------------ action
@@ -199,6 +220,19 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
 
       if (msg.type === 'PLK_GET') {
         const c = await getCfg();
+        // Content scripts run inside whatever page is open, so they get only
+        // what the overlay actually needs: is it locked, and which theme.
+        // The protected-site list, the failed-attempt log and the rest are
+        // for the extension's own pages. All three fields below are already
+        // inferable from whether a lock screen appears.
+        if (!fromExtPage) {
+          sendResponse({
+            locked: await isLocked(),
+            hasPassword: !!(c && c.hash),
+            theme: (c && c.theme) || 'dark'
+          });
+          return;
+        }
         const dev = await getLocalPrefs();
         const r = await getReport();
         sendResponse({
@@ -225,22 +259,20 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
       if (msg.type === 'PLK_UNLOCK') {
         const c = await getCfg();
         if (!c || !c.hash) { sendResponse({ ok: true, note: 'no-password' }); return; }
-        const cd = await checkCooldown();
-        if (cd.blocked) { sendResponse({ ok: false, waitMs: cd.waitMs, cooldown: true }); return; }
-        const good = await PLK.verifyPassword(String(msg.password || ''), c);
-        if (good) {
-          await chrome.storage.session.set({ plk_fail: { n: 0, until: 0 } });
+        const v = await guardedVerify(function () { return PLK.verifyPassword(String(msg.password || ''), c); });
+        if (v.blocked) { sendResponse({ ok: false, waitMs: v.waitMs, cooldown: true }); return; }
+        if (v.ok) {
+          await clearFails();
           const r = await getReport();
           const reportOut = { fails: r.fails, lastFailAt: r.lastFailAt };
           await saveReport({
-            fails: 0, lastFailAt: 0, lastUnlockAt: cd.now,
+            fails: 0, lastFailAt: 0, lastUnlockAt: v.now,
             lastReportFails: r.fails, lastReportFailAt: r.lastFailAt
           });
           await unlockNow();
           sendResponse({ ok: true, report: reportOut });
         } else {
-          const res = await recordFail(cd.f, cd.now);
-          sendResponse({ ok: false, tries: res.tries, waitMs: res.waitMs });
+          sendResponse({ ok: false, tries: v.tries, waitMs: v.waitMs });
         }
         return;
       }
@@ -258,16 +290,14 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
       if (msg.type === 'PLK_SITE_UNLOCK') {
         const c = await getCfg();
         if (!c || !c.hash) { sendResponse({ ok: true }); return; }
-        const cd = await checkCooldown();
-        if (cd.blocked) { sendResponse({ ok: false, waitMs: cd.waitMs, cooldown: true }); return; }
-        const good = await PLK.verifyPassword(String(msg.password || ''), c);
-        if (good) {
-          await chrome.storage.session.set({ plk_fail: { n: 0, until: 0 } });
+        const v = await guardedVerify(function () { return PLK.verifyPassword(String(msg.password || ''), c); });
+        if (v.blocked) { sendResponse({ ok: false, waitMs: v.waitMs, cooldown: true }); return; }
+        if (v.ok) {
+          await clearFails();
           await markSiteUnlocked(String(msg.host || '').toLowerCase());
           sendResponse({ ok: true });
         } else {
-          const res = await recordFail(cd.f, cd.now);
-          sendResponse({ ok: false, tries: res.tries, waitMs: res.waitMs });
+          sendResponse({ ok: false, tries: v.tries, waitMs: v.waitMs });
         }
         return;
       }
@@ -293,12 +323,21 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
       if (msg.type === 'PLK_SET_PASSWORD') {
         if (!fromExtPage) { sendResponse({ ok: false, msg: 'denied' }); return; }
         const c = await getCfg();
-        if (c && c.hash) {
-          const good = await PLK.verifyPassword(String(msg.current || ''), c);
-          if (!good) { sendResponse({ ok: false, msg: 'Wrong current password' }); return; }
-        }
         const next = String(msg.next || '');
         if (next.length < 4) { sendResponse({ ok: false, msg: 'New password must be at least 4 characters' }); return; }
+        if (c && c.hash) {
+          // Changing the password is an unlock path: it ends in unlockNow()
+          // and hands back a fresh recovery code. Unlock first, so the only
+          // ways into a locked profile stay PLK_UNLOCK and PLK_RECOVER.
+          if (await isLocked()) { sendResponse({ ok: false, msg: 'locked' }); return; }
+          // fromExtPage is satisfied by the extension's own lock screen, so
+          // without this the current-password field was an unthrottled door
+          // into the same account the throttled ones protect.
+          const v = await guardedVerify(function () { return PLK.verifyPassword(String(msg.current || ''), c); });
+          if (v.blocked) { sendResponse({ ok: false, msg: 'Too many attempts', waitMs: v.waitMs, cooldown: true }); return; }
+          if (!v.ok) { sendResponse({ ok: false, msg: 'Wrong current password', tries: v.tries, waitMs: v.waitMs }); return; }
+          await clearFails();
+        }
         const rec = await PLK.hashPassword(next);
         // A recovery code is a password-equivalent credential, so it is
         // rotated whenever the password is. Changing the password because you
@@ -329,20 +368,20 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
         // whether the code was right. Nothing is learnable from the error text.
         const next = String(msg.next || '');
         if (next.length < 4) { sendResponse({ ok: false, msg: 'New password must be at least 4 characters' }); return; }
-        const cd = await checkCooldown();
-        if (cd.blocked) { sendResponse({ ok: false, waitMs: cd.waitMs, cooldown: true }); return; }
         const typed = PLK.normalizeRecoveryCode(msg.code);
-        const good = typed.length === PLK.recoveryCodeLength() && await PLK.verifyPassword(
-          typed, { hash: c.rcHash, salt: c.rcSalt, iter: c.rcIter });
-        if (!good) {
-          const res = await recordFail(cd.f, cd.now);
-          sendResponse({ ok: false, msg: 'That recovery code is not valid', tries: res.tries, waitMs: res.waitMs });
+        const v = await guardedVerify(function () {
+          if (typed.length !== PLK.recoveryCodeLength()) return false;
+          return PLK.verifyPassword(typed, { hash: c.rcHash, salt: c.rcSalt, iter: c.rcIter });
+        });
+        if (v.blocked) { sendResponse({ ok: false, msg: 'Too many attempts', waitMs: v.waitMs, cooldown: true }); return; }
+        if (!v.ok) {
+          sendResponse({ ok: false, msg: 'That recovery code is not valid', tries: v.tries, waitMs: v.waitMs });
           return;
         }
         const rec = await PLK.hashPassword(next);
         const code = PLK.makeRecoveryCode();
         const rcRec = await PLK.hashPassword(PLK.normalizeRecoveryCode(code));
-        await chrome.storage.session.set({ plk_fail: { n: 0, until: 0 } });
+        await clearFails();
         await setCfgPatch({
           hash: rec.hash, salt: rec.salt, iter: rec.iter,
           rcHash: rcRec.hash, rcSalt: rcRec.salt, rcIter: rcRec.iter

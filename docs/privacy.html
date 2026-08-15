@@ -36,7 +36,7 @@
   <table>
     <tr><th>Data</th><th>Where it is kept</th><th>Why</th></tr>
     <tr>
-      <td>A salted hash of your password<br>(PBKDF2-SHA256, 310,000 iterations)</td>
+      <td>A salted hash of your password<br>(PBKDF2-SHA256, 600,000 iterations)</td>
       <td><code>chrome.storage.sync</code> — Chrome may replicate this between your own signed-in
           browsers, under your own Google Account</td>
       <td>So the same password unlocks on each of your computers. <strong>The password itself is

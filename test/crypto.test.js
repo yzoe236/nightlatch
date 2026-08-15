@@ -13,7 +13,7 @@ const P = globalThis.NightlatchCrypto;
 
   console.log('hash/verify:');
   const rec = await P.hashPassword('leo-secret-42');
-  ok('记录结构完整(hash/salt/iter)', !!(rec.hash && rec.salt) && rec.iter === 310000, rec);
+  ok('记录结构完整(hash/salt/iter)', !!(rec.hash && rec.salt) && rec.iter === P.ITERATIONS, rec);
   ok('正确密码通过', (await P.verifyPassword('leo-secret-42', rec)) === true);
   ok('错误密码拒绝', (await P.verifyPassword('leo-secret-43', rec)) === false);
   ok('空密码拒绝', (await P.verifyPassword('', rec)) === false);
@@ -29,6 +29,25 @@ const P = globalThis.NightlatchCrypto;
   ok('第 5 次 30 秒', P.backoffMs(5) === 30000);
   ok('之后翻倍', P.backoffMs(6) === 60000 && P.backoffMs(7) === 120000);
   ok('封顶 5 分钟', P.backoffMs(20) === 300000);
+
+  console.log('迭代次数与向后兼容:');
+  ok('新哈希用 600000 次（OWASP 2026-08-15 建议值）', P.ITERATIONS === 600000, P.ITERATIONS);
+  // 0.4.0 / 0.5.0 装机的用户哈希是 310000 次写的，升级后必须照样能解锁
+  const legacy = { hash: null, salt: null, iter: 310000 };
+  {
+    const enc = new TextEncoder();
+    const saltBytes = crypto.getRandomValues(new Uint8Array(16));
+    const key = await crypto.subtle.importKey('raw', enc.encode('old-user-password'), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits(
+      { name: 'PBKDF2', hash: 'SHA-256', salt: saltBytes, iterations: 310000 }, key, 256);
+    const b = new Uint8Array(bits); let s2 = '';
+    for (let i = 0; i < b.length; i++) s2 += String.fromCharCode(b[i]);
+    legacy.hash = btoa(s2);
+    let s3 = ''; for (let i = 0; i < saltBytes.length; i++) s3 += String.fromCharCode(saltBytes[i]);
+    legacy.salt = btoa(s3);
+  }
+  ok('⭐ 老用户 310000 次的哈希仍然能验通过', (await P.verifyPassword('old-user-password', legacy)) === true);
+  ok('老哈希也不会放错密码进来', (await P.verifyPassword('wrong', legacy)) === false);
 
   console.log('恢复码 格式:');
   const rc = P.makeRecoveryCode();
