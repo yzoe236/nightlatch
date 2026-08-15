@@ -19,6 +19,13 @@
            color: var(--accent-fg); font-size: 14px; font-weight: 600; cursor: pointer; }
   .err { color: var(--err); font-size: 12px; min-height: 16px; margin-top: 8px; }
   .foot { font-size: 11px; opacity: .4; margin-top: 22px; }
+  .linkish { background: none; border: 0; color: var(--sub); font-size: 12px; font-weight: 400;
+             text-decoration: underline; cursor: pointer; margin-top: 14px; padding: 0; width: auto; }
+  .linkish:hover { color: var(--fg); }
+  .note { font-size: 12px; color: var(--sub); margin: 10px 0 2px; text-align: left; line-height: 1.5; }
+  .code { font-family: ui-monospace, Consolas, monospace; font-size: 16px; font-weight: 700; letter-spacing: 1.5px;
+          word-break: break-all; user-select: all; background: var(--input-bg); border: 1px dashed var(--input-border);
+          border-radius: 8px; padding: 12px 8px; margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -30,7 +37,24 @@
       <input id="pw" type="password" placeholder="Password" autocomplete="off" autofocus>
       <button type="submit">Unlock</button>
     </form>
+
+    <form id="rf" hidden>
+      <div class="note">Enter the recovery code you wrote down when you set the password, and pick a
+        new password. The code stops working once it is used.</div>
+      <input id="rcode" type="text" placeholder="XXXXX-XXXXX-XXXXX-XXXXX" autocomplete="off" spellcheck="false">
+      <input id="rnew" type="password" placeholder="New password (min 4 characters)" autocomplete="off">
+      <input id="rconf" type="password" placeholder="Repeat new password" autocomplete="off">
+      <button type="submit">Set new password</button>
+    </form>
+
+    <div id="rdone" hidden>
+      <div class="note"><b>Unlocked.</b> Here is your new recovery code. The old one no longer works.
+        Write this down now, it is shown once.</div>
+      <div class="code" id="rcnew"></div>
+    </div>
+
     <div class="err" id="err"></div>
+    <button type="button" class="linkish" id="toggleRecover">Forgot your password?</button>
     <div class="foot">Nightlatch · Lock state is per-device and never syncs</div>
   </div>
   <script src="themes.js"></script>

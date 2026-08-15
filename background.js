@@ -204,6 +204,7 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
         sendResponse({
           locked: await isLocked(),
           hasPassword: !!(c && c.hash),
+          hasRecovery: !!(c && c.rcHash),
           idleAutolock: dev.idleAutolock !== false,
           autolockMin: effectiveAutolockMin(c, dev),
           storedAutolockMin: c && typeof c.autolockMin === 'number' ? c.autolockMin : DEFAULT_AUTOLOCK_MIN,
@@ -299,9 +300,52 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
         const next = String(msg.next || '');
         if (next.length < 4) { sendResponse({ ok: false, msg: 'New password must be at least 4 characters' }); return; }
         const rec = await PLK.hashPassword(next);
-        await setCfgPatch({ hash: rec.hash, salt: rec.salt, iter: rec.iter });
+        // A recovery code is a password-equivalent credential, so it is
+        // rotated whenever the password is. Changing the password because you
+        // think it leaked would be pointless if an old code kept working.
+        const code = PLK.makeRecoveryCode();
+        const rcRec = await PLK.hashPassword(PLK.normalizeRecoveryCode(code));
+        await setCfgPatch({
+          hash: rec.hash, salt: rec.salt, iter: rec.iter,
+          rcHash: rcRec.hash, rcSalt: rcRec.salt, rcIter: rcRec.iter
+        });
         await unlockNow(); // you just proved you're the owner
-        sendResponse({ ok: true });
+        // Returned exactly once. Only the hash was stored, so if the user
+        // loses this there is no way to show it again.
+        sendResponse({ ok: true, recoveryCode: code });
+        return;
+      }
+
+      // Forgotten password. Trades a valid recovery code for a new password,
+      // and issues a fresh code so the used one stops working.
+      if (msg.type === 'PLK_RECOVER') {
+        if (!fromExtPage) { sendResponse({ ok: false, msg: 'denied' }); return; }
+        const c = await getCfg();
+        if (!c || !c.rcHash) { sendResponse({ ok: false, msg: 'No recovery code is set on this profile' }); return; }
+        // Shares the cooldown pool with the password door, so an attacker
+        // cannot shop between the two.
+        const cd = await checkCooldown();
+        if (cd.blocked) { sendResponse({ ok: false, waitMs: cd.waitMs, cooldown: true }); return; }
+        const typed = PLK.normalizeRecoveryCode(msg.code);
+        const good = typed.length === PLK.recoveryCodeLength() && await PLK.verifyPassword(
+          typed, { hash: c.rcHash, salt: c.rcSalt, iter: c.rcIter });
+        if (!good) {
+          const res = await recordFail(cd.f, cd.now);
+          sendResponse({ ok: false, msg: 'That recovery code is not valid', tries: res.tries, waitMs: res.waitMs });
+          return;
+        }
+        const next = String(msg.next || '');
+        if (next.length < 4) { sendResponse({ ok: false, msg: 'New password must be at least 4 characters' }); return; }
+        const rec = await PLK.hashPassword(next);
+        const code = PLK.makeRecoveryCode();
+        const rcRec = await PLK.hashPassword(PLK.normalizeRecoveryCode(code));
+        await chrome.storage.session.set({ plk_fail: { n: 0, until: 0 } });
+        await setCfgPatch({
+          hash: rec.hash, salt: rec.salt, iter: rec.iter,
+          rcHash: rcRec.hash, rcSalt: rcRec.salt, rcIter: rcRec.iter
+        });
+        await unlockNow();
+        sendResponse({ ok: true, recoveryCode: code });
         return;
       }
 

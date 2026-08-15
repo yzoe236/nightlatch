@@ -60,5 +60,50 @@
     return Math.min(300000, 30000 * Math.pow(2, fails - 5));
   }
 
-  root.NightlatchCrypto = { hashPassword: hashPassword, verifyPassword: verifyPassword, backoffMs: backoffMs, ITERATIONS: ITERATIONS };
+  // ------------------------------------------------------- recovery code
+  // Crockford base32: no I, L, O or U, so the look-alikes of 1 and 0 are gone
+  // and the code survives being written on paper and typed back a month later.
+  const RC_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+  const RC_GROUPS = 4;
+  const RC_GROUP_LEN = 5; // 20 chars x 5 bits = 100 bits of entropy
+
+  // The plaintext code. Shown to the user exactly once; only its hash is
+  // stored, the same way the password is handled.
+  function makeRecoveryCode() {
+    const n = RC_GROUPS * RC_GROUP_LEN;
+    const bytes = root.crypto.getRandomValues(new Uint8Array(n));
+    let out = '';
+    for (let i = 0; i < n; i++) {
+      // 256 % 32 === 0, so this modulo is unbiased.
+      out += RC_ALPHABET[bytes[i] % RC_ALPHABET.length];
+      if ((i + 1) % RC_GROUP_LEN === 0 && i + 1 < n) out += '-';
+    }
+    return out;
+  }
+
+  // Canonical form for hashing and comparison. Accepts whatever the user
+  // actually types: lower case, missing or extra dashes, spaces, and the
+  // Crockford substitutions (I and L read as 1, O reads as 0).
+  function normalizeRecoveryCode(s) {
+    const up = String(s || '').toUpperCase()
+      .replace(/[IL]/g, '1')
+      .replace(/O/g, '0');
+    let out = '';
+    for (let i = 0; i < up.length; i++) {
+      if (RC_ALPHABET.indexOf(up[i]) >= 0) out += up[i];
+    }
+    return out;
+  }
+
+  function recoveryCodeLength() { return RC_GROUPS * RC_GROUP_LEN; }
+
+  root.NightlatchCrypto = {
+    hashPassword: hashPassword,
+    verifyPassword: verifyPassword,
+    backoffMs: backoffMs,
+    makeRecoveryCode: makeRecoveryCode,
+    normalizeRecoveryCode: normalizeRecoveryCode,
+    recoveryCodeLength: recoveryCodeLength,
+    ITERATIONS: ITERATIONS
+  };
 })(typeof self !== 'undefined' ? self : globalThis);

@@ -81,6 +81,10 @@ Unlocking at home can never unlock the lab machine.
   shared lab, 60 in a private office. A machine with no number of its own follows
   the synced default, which is also what a freshly installed profile inherits, so
   a new computer is never left unprotected.
+- **Recovery code.** Setting a password issues a 20-character code with 100 bits of
+  entropy, shown once. If you forget the password, that code buys you a new one from
+  the lock screen. Only its hash is stored, it shares the brute-force cooldown with
+  the password, and it is replaced every time the password changes.
 - **Strict mode** — while locked, `chrome://settings`, history, downloads,
   bookmarks, the password manager and the new-tab page redirect to the lock screen
   (content scripts cannot cover those pages).

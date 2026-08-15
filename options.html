@@ -26,6 +26,10 @@
   .hint { font-size: 12px; opacity: .65; margin-top: 6px; }
   .devbadge { font-size: 10px; font-weight: 700; color: #1a73e8; border: 1px solid #1a73e8; border-radius: 4px; padding: 0 5px; vertical-align: middle; }
   .dim[data-dim="1"] { opacity: .55; }
+  .rccard { border: 1px solid #f9ab00; background: rgba(249,171,0,.10); border-radius: 10px; padding: 14px 16px; margin-top: 12px; }
+  .rccode { font-family: ui-monospace, Consolas, monospace; font-size: 20px; font-weight: 700; letter-spacing: 2px;
+            text-align: center; padding: 12px 6px; margin-top: 10px; border-radius: 8px;
+            border: 1px dashed rgba(128,128,128,.6); user-select: all; word-break: break-all; }
   .honest { font-size: 13px; opacity: .85; border-left: 3px solid #f9ab00; padding: 4px 12px; margin-top: 26px; }
   .honest b { display: block; margin-bottom: 4px; }
   .honest ul { margin: 6px 0 0; padding-left: 18px; }
@@ -43,6 +47,18 @@
     <label>New password (min 4 characters)<input id="next" type="password" autocomplete="off"></label>
     <label>Repeat new password<input id="confirm" type="password" autocomplete="off"></label>
     <button id="savePw">Save password</button><span class="status" id="pwStatus"></span>
+    <div class="hint" id="rcState"></div>
+  </div>
+
+  <div class="rccard" id="rcCard" hidden>
+    <b>⚠️ Write this recovery code down before you close this page</b>
+    <div class="hint">It is shown once and never again. Only a hash of it is stored, so nobody can
+      recover it later, including the author of this extension. Keep it somewhere that is not this
+      computer. Anyone holding it can set a new password, so treat it like the password itself.</div>
+    <div class="rccode" id="rcValue"></div>
+    <button id="rcCopy">Copy to clipboard</button>
+    <button id="rcDone" style="background:transparent;color:inherit;border:1px solid rgba(128,128,128,.5)">I have written it down</button>
+    <span class="status" id="rcStatus"></span>
   </div>
 
   <h2>Auto-lock</h2>

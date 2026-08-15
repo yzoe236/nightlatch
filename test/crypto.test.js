@@ -30,6 +30,34 @@ const P = globalThis.NightlatchCrypto;
   ok('之后翻倍', P.backoffMs(6) === 60000 && P.backoffMs(7) === 120000);
   ok('封顶 5 分钟', P.backoffMs(20) === 300000);
 
+  console.log('恢复码 格式:');
+  const rc = P.makeRecoveryCode();
+  ok('形如 XXXXX-XXXXX-XXXXX-XXXXX', /^[0-9A-Z]{5}(-[0-9A-Z]{5}){3}$/.test(rc), rc);
+  ok('不含易混字母 I L O U', !/[ILOU]/.test(rc), rc);
+  ok('去掉连字符后 20 位', P.normalizeRecoveryCode(rc).length === P.recoveryCodeLength());
+
+  const many = new Set();
+  for (let i = 0; i < 300; i++) many.add(P.makeRecoveryCode());
+  ok('生成 300 个无重复', many.size === 300, many.size);
+
+  console.log('恢复码 归一化（用户手抄回来打成什么样都得认）:');
+  ok('小写', P.normalizeRecoveryCode(rc.toLowerCase()) === P.normalizeRecoveryCode(rc));
+  ok('漏掉连字符', P.normalizeRecoveryCode(rc.replace(/-/g, '')) === P.normalizeRecoveryCode(rc));
+  ok('打成空格', P.normalizeRecoveryCode(' ' + rc.replace(/-/g, ' ') + ' ') === P.normalizeRecoveryCode(rc));
+  ok('I 认成 1', P.normalizeRecoveryCode('I2345') === '12345');
+  ok('L 认成 1', P.normalizeRecoveryCode('L2345') === '12345');
+  ok('O 认成 0', P.normalizeRecoveryCode('O2345') === '02345');
+  ok('空输入不炸', P.normalizeRecoveryCode(null) === '' && P.normalizeRecoveryCode(undefined) === '');
+
+  console.log('恢复码 校验:');
+  const rcRec = await P.hashPassword(P.normalizeRecoveryCode(rc));
+  ok('正确的码通过', (await P.verifyPassword(P.normalizeRecoveryCode(rc), rcRec)) === true);
+  ok('抄成小写没连字符也通过',
+    (await P.verifyPassword(P.normalizeRecoveryCode(rc.toLowerCase().replace(/-/g, '')), rcRec)) === true);
+  ok('另一个码被拒',
+    (await P.verifyPassword(P.normalizeRecoveryCode(P.makeRecoveryCode()), rcRec)) === false);
+  ok('空码被拒', (await P.verifyPassword('', rcRec)) === false);
+
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);
 })();

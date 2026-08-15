@@ -38,15 +38,15 @@ English
 ## Detailed description
 
 ```
-Nightlatch puts a password on your browser profile — and, unlike other lock extensions, it keeps the lock where it belongs: on the computer you locked.
+Nightlatch puts a password on your browser profile, and unlike other lock extensions it keeps the lock where it belongs: on the computer you locked.
 
 WHY THIS EXISTS
 
-If you use a shared computer — a lab machine, an office workstation, a front-desk PC, a family desktop — you are one unattended moment away from someone reading your mail, your history, your saved sessions and everything else your signed-in profile can reach. Locking the whole operating system is the right answer, and everyone forgets.
+If you use a shared computer (a lab machine, an office workstation, a front-desk PC, a family desktop), you are one unattended moment away from someone reading your mail, your history, your saved sessions and everything else your signed-in profile can reach. Locking the whole operating system is the right answer, and everyone forgets.
 
 So people install a browser lock. But several of them keep the "unlocked" flag in synced storage, which follows your Google Account across machines. The result is a quiet failure exactly where it hurts:
 
-  You lock the shared lab computer and go home. At home you unlock your own browser — and the lab machine unlocks itself too, while you are nowhere near it.
+  You lock the shared lab computer and go home. At home you unlock your own browser, and the lab machine unlocks itself too, while you are nowhere near it.
 
 Nightlatch was built to fix that specific bug. Lock state lives in per-session, per-device storage that is never replicated. Your password and preferences sync so you set them once; the lock itself never travels.
 
@@ -54,7 +54,7 @@ WHAT IT DOES
 
 • Full-page lock screen. Drawn before the page paints, so nothing flashes into view. It traps focus and swallows clicks, keystrokes, scrolling and copying until the password goes in.
 
-• Idle auto-lock that measures the right thing. The timer counts inactivity in YOUR Chrome profile, not system-wide idle. On a shared machine, someone else working under their own profile keeps the computer busy — but it will not keep your profile unlocked. A tab playing audio counts as in use, so a video call is never interrupted.
+• Idle auto-lock that measures the right thing. The timer counts inactivity in YOUR Chrome profile, not system-wide idle. On a shared machine, someone else working under their own profile keeps the computer busy, but it will not keep your profile unlocked. A tab playing audio counts as in use, so a video call is never interrupted.
 
 • Locks on OS screen lock (Win+L) and on every browser restart. Restarting always returns to locked.
 
@@ -62,7 +62,9 @@ WHAT IT DOES
 
 • A different timer on every computer. Five minutes on the shared lab machine, an hour in your private office. Each computer holds its own number, and any computer you have not customised follows your account default, so a machine you just set up is protected from the first minute.
 
-• Strict mode. While locked, Settings, History, Downloads, Bookmarks, the Password Manager and the New Tab page redirect to the lock screen — pages an overlay cannot cover.
+• Recovery code. Setting a password issues a 20-character code, shown once. Write it down and you can never be locked out of your own profile: type it on the lock screen and you get to pick a new password. Only a hash of the code is stored, so nobody can recover it for you, and a fresh code is issued every time the password changes.
+
+• Strict mode. While locked, Settings, History, Downloads, Bookmarks, the Password Manager and the New Tab page redirect to the lock screen. An overlay cannot cover those pages.
 
 • Protected websites. List hostnames such as your bank or webmail; they ask for the password again once per browser run, even while the profile is unlocked.
 
@@ -74,17 +76,21 @@ WHAT IT DOES
 
 PRIVACY
 
-No account. No telemetry. No server. Zero network requests — search the source for fetch, XMLHttpRequest or WebSocket and you will find none. Your password is never stored; only a salted PBKDF2-SHA256 hash with 310,000 iterations. Broad site access is requested for exactly one reason: the lock screen has to be able to cover whatever page is open.
+No account. No telemetry. No server. Zero network requests. Search the source for fetch, XMLHttpRequest or WebSocket and you will find none. Your password is never stored; only a salted PBKDF2-SHA256 hash with 310,000 iterations. Broad site access is requested for exactly one reason: the lock screen has to be able to cover whatever page is open.
 
 HONEST ABOUT WHAT IT IS NOT
 
-This is a curtain against casual snooping, not a vault. Anyone who opens chrome://extensions and turns the extension off gets past it — that is true of every extension in this category, and Nightlatch deliberately leaves that page reachable so you can never lock yourself out permanently. Someone with access to the same operating-system account can also read the browser profile straight off the disk; no extension can prevent that.
+This is a curtain against casual snooping, not a vault. Anyone who opens chrome://extensions and turns the extension off gets past it. That is true of every extension in this category, and Nightlatch deliberately leaves that page reachable so you can never lock yourself out permanently. Someone with access to the same operating-system account can also read the browser profile straight off the disk; no extension can prevent that.
 
 On a shared computer the real baseline is locking the OS (Win+L) or giving each person their own OS account. Nightlatch is the second curtain, for the many times you forget.
 
 FREE AND OPEN SOURCE
 
-Every feature is free. There is no paid tier and nothing is held back. The complete source is published under the MIT licence at https://github.com/yzoe236/nightlatch — please read it before you type a password into it. That is the point of an open lock.
+Every feature is free. There is no paid tier and nothing is held back.
+
+Other extensions in this category put website protection, custom auto-lock timers, lock-screen themes and unlock activity logs behind a licence key. All four are free here.
+
+The complete source is published under the MIT licence at https://github.com/yzoe236/nightlatch. Please read it before you type a password into it. That is the point of an open lock.
 
 ---
 Google Chrome is a trademark of Google LLC. Use of this trademark is subject to Google Permissions. Nightlatch is an independent project and is not affiliated with or endorsed by Google LLC.

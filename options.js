@@ -41,6 +41,10 @@
     chrome.runtime.sendMessage({ type: 'PLK_GET' }, function (resp) {
       if (chrome.runtime.lastError || !resp) return;
       $('curLabel').hidden = !resp.hasPassword;
+      $('rcState').textContent = !resp.hasPassword ? ''
+        : (resp.hasRecovery
+            ? 'A recovery code exists for this profile. Saving a new password replaces it with a new one.'
+            : 'No recovery code yet. Save your password again to generate one, and you will be able to get back in if you forget it.');
       $('idleAutolock').checked = resp.idleAutolock !== false;
       storedMin = resp.storedAutolockMin || 5;
       deviceMin = typeof resp.deviceAutolockMin === 'number' ? resp.deviceAutolockMin : null;
@@ -52,6 +56,31 @@
       paintTimerRow();
     });
   }
+
+  // --------------------------------------------------- recovery code
+  // The plaintext arrives once in the save response and is never stored, so
+  // this panel is the only chance the user gets to write it down.
+  function showRecoveryCode(code) {
+    $('rcValue').textContent = code;
+    $('rcCard').hidden = false;
+    $('rcStatus').textContent = '';
+    $('rcCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  $('rcCopy').onclick = function () {
+    navigator.clipboard.writeText($('rcValue').textContent).then(function () {
+      $('rcStatus').className = 'status ok';
+      $('rcStatus').textContent = 'Copied. Paste it somewhere off this computer.';
+    }, function () {
+      $('rcStatus').className = 'status bad';
+      $('rcStatus').textContent = 'Copy failed. Select the code and copy it by hand.';
+    });
+  };
+
+  $('rcDone').onclick = function () {
+    $('rcValue').textContent = '';
+    $('rcCard').hidden = true;
+  };
 
   // --------------------------------------------------------------- password
   $('savePw').onclick = function () {
@@ -66,6 +95,7 @@
         pwStatus.className = 'status ok';
         pwStatus.textContent = '✅ Saved. Lock with Ctrl+Shift+L or the toolbar icon.';
         $('cur').value = ''; $('next').value = ''; $('confirm').value = '';
+        if (resp.recoveryCode) showRecoveryCode(resp.recoveryCode);
         load();
       } else {
         pwStatus.className = 'status bad';
