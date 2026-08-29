@@ -59,10 +59,10 @@ splits storage by intent so that cannot happen:
 
 | Data | Stored in | Behaviour |
 |---|---|---|
-| Password (PBKDF2-SHA256 hash, 310k iterations, random salt) | `storage.sync` | Follows your account — set the password once, works everywhere |
+| Password (PBKDF2-HMAC-SHA256 hash, 600k iterations, random salt) | `storage.sync` | Follows your account — set the password once, works everywhere |
 | Shared preferences (default timer, theme, protected sites) | `storage.sync` | The baseline every machine starts from |
 | **Lock state** | **`storage.session`** | **Per device, per browser run. Never synced. Cleared on restart → always starts locked** |
-| **Per-device switches and timer**, failed-attempt log | `storage.local` | Per device. Never synced. Overrides the synced default when set |
+| **Per-device switches and timer**, failed-attempt log, last 20 lock reasons | `storage.local` | Per device. Never synced. Overrides the synced default when set |
 
 Unlocking at home can never unlock the lab machine.
 

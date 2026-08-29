@@ -7,3 +7,10 @@ dist/
 node_modules/
 .DS_Store
 Thumbs.db
+
+# Internal working notes. This repository is public: the handoff inbox carries
+# Leo's own words verbatim, and the todo file names security work that is
+# fixed here but not yet shipped to the store. Neither belongs on GitHub while
+# users are still running the old build.
+_handoff/
+store/待办_Leo.md
