@@ -11,8 +11,14 @@
   // yanked away by an auto-leave before the user has written it down.
   let holdOpen = false;
 
+  // Three things call leave(): the startup check finding the profile already
+  // unlocked, the unlock broadcast, and this page's own unlock form. On a
+  // stale tab the first two can both land, so it runs once and once only.
+  let leaving = false;
+
   function leave() {
-    if (holdOpen) return;
+    if (holdOpen || leaving) return;
+    leaving = true;
     if (fromOk) { location.replace(from); return; }
     // Everything else came from a chrome:// page, which this page cannot
     // navigate to itself. It must not close itself either: on a fresh browser
@@ -22,6 +28,7 @@
     // worker moves the tab instead, and refuses to close a last one.
     chrome.runtime.sendMessage({ type: 'PLK_LEAVE', from: from }, function (resp) {
       if (chrome.runtime.lastError || !resp || !resp.ok) {
+        leaving = false; // nothing happened, so let a later broadcast retry
         const err = document.getElementById('err');
         err.style.color = '#81c995';
         err.textContent = 'Unlocked. You can close this tab.';

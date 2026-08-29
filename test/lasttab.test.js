@@ -165,6 +165,29 @@ async function seedLocked(h) {
   }
 
   console.log('');
+  console.log('同一个标签页问两次:');
+  {
+    // leave() 有三个调用点,陈旧标签页上前两个可能都会触发。
+    // 第二次不能凭空多开一个标签页出来。
+    const h = createHarness({ tabs: [{ id: 1, url: 'chrome://newtab/', audible: false }] });
+    await seedLocked(h);
+    await h.send({ type: 'PLK_UNLOCK', password: 'correct horse' });
+    h.setRefuseChromeNav(true);
+    await h.send({ type: 'PLK_LEAVE', from: 'chrome://newtab/' }, true, 1);
+    await h.settle();
+    const mid = (await h.chrome.tabs.query({})).length;
+    const before = h.log.length;
+    const again = await h.send({ type: 'PLK_LEAVE', from: 'chrome://newtab/' }, true, 1);
+    await h.settle();
+    const after = h.log.slice(before);
+    ok('第一次之后剩一个标签页', mid === 1, mid);
+    ok('⭐ 再问一次不会多开标签页',
+      after.every(function (l) { return l.indexOf('tabs.create') < 0; }), after);
+    ok('标签页数量没变', (await h.chrome.tabs.query({})).length === 1);
+    ok('如实回答已经处理完了', again && again.ok === true, again);
+  }
+
+  console.log('');
   console.log(pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);
 })();

@@ -392,6 +392,12 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
           // no url is documented to open the New Tab Page.
           try {
             const open = await chrome.tabs.query({});
+            // A second PLK_LEAVE for a tab that has already gone must not
+            // leave a stray new tab behind as the price of asking twice.
+            if (!open.some(function (t) { return t.id === tabId; })) {
+              sendResponse({ ok: true });
+              return;
+            }
             if (open.length <= 1) await chrome.tabs.create({});
             await chrome.tabs.remove(tabId);
             moved = true;
