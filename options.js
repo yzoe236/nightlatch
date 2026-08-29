@@ -53,7 +53,47 @@
       $('strict').checked = !!resp.strict;
       $('theme').value = resp.theme || 'dark';
       $('sites').value = (resp.sites || []).join('\n');
+      paintLockLog(resp.lockLog || []);
       paintTimerRow();
+    });
+  }
+
+  // Plain English for each reason the service worker records. Entries where
+  // did=false are locks that were considered and dropped, so they need their
+  // own wording — "no activity" would be a lie about a lock that never
+  // happened.
+  const LOCK_REASONS = {
+    'screen-lock': 'The computer screen locked',
+    'screen-lock-stale': 'Ignored an out-of-date screen-lock signal (you were using the computer)',
+    'idle-timeout': 'No activity in this profile for the auto-lock time',
+    'shortcut': 'You pressed Ctrl+Shift+L',
+    'popup': 'You clicked Lock now',
+    'manual': 'Locked on request'
+  };
+  const LOCK_SKIPPED = {
+    'idle-timeout': 'Auto-lock cancelled: you came back before it took effect'
+  };
+
+  function paintLockLog(entries) {
+    const ul = $('lockLog');
+    ul.textContent = '';
+    if (!entries.length) {
+      const li = document.createElement('li');
+      li.className = 'skip';
+      li.textContent = 'Nothing recorded yet on this computer.';
+      ul.appendChild(li);
+      return;
+    }
+    entries.forEach(function (e) {
+      const li = document.createElement('li');
+      if (!e.did) li.className = 'skip';
+      const t = document.createElement('time');
+      t.textContent = new Date(e.at).toLocaleString();
+      const what = document.createElement('span');
+      what.textContent = (!e.did && LOCK_SKIPPED[e.why]) || LOCK_REASONS[e.why] || e.why;
+      li.appendChild(t);
+      li.appendChild(what);
+      ul.appendChild(li);
     });
   }
 

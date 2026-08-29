@@ -126,6 +126,40 @@ async function clearFails() {
   await chrome.storage.session.set({ plk_fail: { n: 0, until: 0 } });
 }
 
+// Locking and unlocking both read state, decide, and write back across several
+// awaits. Run two at once and one silently overwrites the other — an idle
+// timeout that started deciding before the password was typed still gets to
+// throw the unlock away, which reads to the user as "it asked me again".
+// Both queue on one chain, the same technique the credential checks use.
+let stateGate = Promise.resolve();
+function serialise(fn) {
+  const run = stateGate.then(fn);
+  stateGate = run.then(function () {}, function () {});
+  return run;
+}
+
+// Why this profile locked, so a lock nobody expected can be explained after
+// the fact. Timestamps and a reason string only — no URLs, no credentials.
+//
+// Read-modify-write, so two triggers landing together would otherwise drop an
+// entry, and a log that quietly loses the interesting line is worse than none.
+// Its own chain, not the state one: writing the log must never be able to wait
+// on a lock that is waiting on the log.
+const LOCK_LOG_MAX = 20;
+let lockLogGate = Promise.resolve();
+function noteLockEvent(why, did) {
+  const run = lockLogGate.then(async function () {
+    try {
+      const o = await chrome.storage.local.get({ plk_lockLog: [] });
+      const log = Array.isArray(o.plk_lockLog) ? o.plk_lockLog : [];
+      log.unshift({ at: Date.now(), why: why, did: !!did });
+      await chrome.storage.local.set({ plk_lockLog: log.slice(0, LOCK_LOG_MAX) });
+    } catch (e) { /* diagnostics must never break locking */ }
+  });
+  lockLogGate = run.then(function () {}, function () {});
+  return run;
+}
+
 // ------------------------------------------------------------------ action
 async function applyBadge(locked) {
   try {
@@ -171,15 +205,37 @@ async function guardSweep() {
   }
 }
 
-async function lockNow() {
-  await chrome.storage.session.remove(['plk_unlocked', 'plk_siteUnlocks']); // site passes die with the global lock
+// `confirm` is for callers whose decision was made earlier and may since have
+// gone stale. It is re-run at the moment of writing, with the gate held, so a
+// timer that decided to lock cannot act on a clock reading that an unlock or a
+// keystroke has already replaced. Callers who mean "lock right now" (screen
+// lock, Ctrl+Shift+L, the popup button) pass nothing and always win.
+async function lockNow(why, confirm) {
+  const did = await serialise(async function () {
+    if (confirm && !(await confirm())) return false;
+    await chrome.storage.session.remove(['plk_unlocked', 'plk_siteUnlocks']); // site passes die with the global lock
+    return true;
+  });
+  await noteLockEvent(why || 'manual', did);
+  if (!did) return false;
   await coverAll();
   await broadcastState();
+  return true;
 }
 
 async function unlockNow() {
-  await chrome.storage.session.set({ plk_unlocked: true });
-  await noteActivity();
+  // One write, not two: between setting the flag and stamping the clock there
+  // used to be a window where the profile was unlocked but still looked hours
+  // idle, and an alarm landing in it locked straight back.
+  //
+  // plk_unlockedAt is separate from plk_lastActive on purpose. Ordinary
+  // browsing keeps refreshing plk_lastActive, so it cannot answer "did a human
+  // just prove they hold the password"; only this one can, and the screen-lock
+  // listener needs exactly that question answered.
+  await serialise(function () {
+    const now = Date.now();
+    return chrome.storage.session.set({ plk_unlocked: true, plk_lastActive: now, plk_unlockedAt: now });
+  });
   await broadcastState();
 }
 
@@ -235,7 +291,9 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
         }
         const dev = await getLocalPrefs();
         const r = await getReport();
+        const lg = await chrome.storage.local.get({ plk_lockLog: [] });
         sendResponse({
+          lockLog: Array.isArray(lg.plk_lockLog) ? lg.plk_lockLog : [],
           locked: await isLocked(),
           hasPassword: !!(c && c.hash),
           hasRecovery: !!(c && c.rcHash),
@@ -302,7 +360,8 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
         return;
       }
 
-      if (msg.type === 'PLK_LOCK') { await lockNow(); sendResponse({ ok: true }); return; }
+      if (msg.type === 'PLK_LOCK') { await lockNow('popup'); sendResponse({ ok: true }); return; }
+
 
       if (msg.type === 'PLK_SET_DEVICE') {
         if (!fromExtPage) { sendResponse({ ok: false, msg: 'denied' }); return; }
@@ -336,6 +395,12 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
           const v = await guardedVerify(function () { return PLK.verifyPassword(String(msg.current || ''), c); });
           if (v.blocked) { sendResponse({ ok: false, msg: 'Too many attempts', waitMs: v.waitMs, cooldown: true }); return; }
           if (!v.ok) { sendResponse({ ok: false, msg: 'Wrong current password', tries: v.tries, waitMs: v.waitMs }); return; }
+          // guardedVerify queues behind every other credential check, so the
+          // isLocked() above can be minutes old by now. Ask again, or a lock
+          // that landed while this waited would be undone by the unlockNow()
+          // at the end of this branch — the exact thing the check above is
+          // there to prevent.
+          if (await isLocked()) { sendResponse({ ok: false, msg: 'locked' }); return; }
           await clearFails();
         }
         const rec = await PLK.hashPassword(next);
@@ -447,9 +512,34 @@ chrome.alarms.onAlarm.addListener(function (a) {
       const audible = await chrome.tabs.query({ audible: true });
       if (audible.length) { await noteActivity(); return; }
     } catch (e) { /* noop */ }
-    await lockNow();
+    // Everything above straddles awaits, and the tab query in particular is
+    // slow enough to cover a whole unlock. Ask the clock again on the way in.
+    await lockNow('idle-timeout', async function () {
+      const now = await chrome.storage.session.get({ plk_lastActive: 0 });
+      return !!now.plk_lastActive && Date.now() - now.plk_lastActive >= min * 60000;
+    });
   })();
 });
+
+// What the screen is doing right now, asked rather than remembered.
+//
+// Callback form on purpose. chrome.idle gained promise support later than the
+// oldest Chrome this runs on, and there the promise call returns undefined,
+// which would read as "not locked" and skip a lock that should happen. Every
+// way this can go wrong — old Chrome, an API error, no answer at all —
+// resolves to 'locked', so a lost answer is never a lost lock.
+function currentIdleState() {
+  return new Promise(function (resolve) {
+    let done = false;
+    function finish(s) { if (!done) { done = true; resolve(s); } }
+    setTimeout(function () { finish('locked'); }, 2000);
+    try {
+      chrome.idle.queryState(15, function (s) {
+        finish(chrome.runtime.lastError || !s ? 'locked' : s);
+      });
+    } catch (e) { finish('locked'); }
+  });
+}
 
 function ensureAlarm() {
   chrome.alarms.create(IDLE_ALARM, { periodInMinutes: 1 });
@@ -459,16 +549,47 @@ ensureAlarm(); // idempotent — runs on every service-worker wake
 // OS screen lock (Win+L / walk-away lock) → lock this profile immediately.
 // System-wide "idle" is deliberately ignored: on a shared computer someone
 // else's activity must not keep your profile unlocked.
+//
+// The event says what the screen was doing when it was sent, and this listener
+// can run much later: an idle service worker is torn down, and the event that
+// wakes it back up has already waited. A 'locked' landing after the user has
+// sat down and typed their password locks them straight back out, which is
+// indistinguishable from the extension being broken.
+//
+// The tempting fix — ask chrome.idle what the screen is doing now, and skip
+// the lock if it says 'active' — is wrong, and dangerously so. A late event
+// after a walk-away looks identical: screen locked hours ago, machine slept,
+// event arrives on resume once the user has unlocked Windows, so 'now' is
+// 'active' there too. Skipping on that answer would leave the profile open in
+// exactly the case this whole feature exists for.
+//
+// What separates the two is not the screen, it is whether somebody has proved
+// they hold the password since. So the query only ever runs in the window just
+// after a successful unlock, and only there can a lock be skipped. Reaching
+// that window requires typing the correct password, which is already the way
+// in, so nothing an attacker can do gets easier. Every other path locks
+// immediately, exactly as before.
+const RELOCK_GRACE_MS = 10000;
 chrome.idle.onStateChanged.addListener(function (state) {
+  if (state !== 'locked') return;
   (async function () {
     const c = await getCfg();
     if (!c || !c.hash) return;
-    if (state === 'locked') await lockNow();
+    const s = await chrome.storage.session.get({ plk_unlockedAt: 0 });
+    if (s.plk_unlockedAt && Date.now() - s.plk_unlockedAt < RELOCK_GRACE_MS) {
+      // Still ask, rather than assuming. Hitting Win+L seconds after unlocking
+      // is a real thing people do, and there the screen really is locked.
+      if (await currentIdleState() !== 'locked') {
+        await noteLockEvent('screen-lock-stale', false);
+        return;
+      }
+    }
+    await lockNow('screen-lock');
   })();
 });
 
 chrome.commands.onCommand.addListener(function (cmd) {
-  if (cmd === 'lock-now') lockNow();
+  if (cmd === 'lock-now') lockNow('shortcut');
 });
 
 // While locked (strict), keep data pages unreachable — including mid-session
