@@ -14,9 +14,19 @@
   function leave() {
     if (holdOpen) return;
     if (fromOk) { location.replace(from); return; }
-    document.getElementById('err').style.color = '#81c995';
-    document.getElementById('err').textContent = 'Unlocked. You can close this tab';
-    setTimeout(function () { window.close(); }, 800);
+    // Everything else came from a chrome:// page, which this page cannot
+    // navigate to itself. It must not close itself either: on a fresh browser
+    // start the new tab page is often the only tab, and closing it takes the
+    // window, the browser, and with it the session storage the unlock lives
+    // in — so the relaunch asks for the password again, for ever. The service
+    // worker moves the tab instead, and refuses to close a last one.
+    chrome.runtime.sendMessage({ type: 'PLK_LEAVE', from: from }, function (resp) {
+      if (chrome.runtime.lastError || !resp || !resp.ok) {
+        const err = document.getElementById('err');
+        err.style.color = '#81c995';
+        err.textContent = 'Unlocked. You can close this tab.';
+      }
+    });
   }
 
   // Theme + already-unlocked check (stale tab leaves immediately).

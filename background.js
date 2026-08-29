@@ -362,6 +362,44 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
 
       if (msg.type === 'PLK_LOCK') { await lockNow('popup'); sendResponse({ ok: true }); return; }
 
+      // The lock landing page asking for a way out once it is unlocked. It
+      // stands in for a guarded page (the new tab page, chrome://settings),
+      // and an extension page cannot reach those with location.replace, so
+      // the tab has to be moved from here.
+      //
+      // It used to close itself instead. Closing the only tab closes the
+      // window, closing the last window quits Chrome, and lock state lives in
+      // session storage — so the relaunch came back locked and asked again.
+      // Typing the correct password made the browser vanish and then demand
+      // the password again, round and round. Never close the last tab.
+      if (msg.type === 'PLK_LEAVE') {
+        if (!fromExtPage) { sendResponse({ ok: false, msg: 'denied' }); return; }
+        if (await isLocked()) { sendResponse({ ok: false, msg: 'locked' }); return; }
+        const tabId = sender.tab && sender.tab.id;
+        if (typeof tabId !== 'number') { sendResponse({ ok: false }); return; }
+        // `from` rides in on a query string anyone can edit, so it is matched
+        // rather than followed: the only destinations on offer are the pages
+        // this extension redirects away from in the first place.
+        const from = String(msg.from || '');
+        const back = GUARD_RE.test(from) ? from : 'chrome://newtab/';
+        let moved = true;
+        try { await chrome.tabs.update(tabId, { url: back }); } catch (e) { moved = false; }
+        if (!moved) {
+          // Chrome does not always let an extension navigate a tab to a
+          // chrome:// page. Closing this one is the fallback, but a fresh tab
+          // has to exist first when it is the only one, or closing it takes
+          // the window, the browser, and the unlock with it. tabs.create with
+          // no url is documented to open the New Tab Page.
+          try {
+            const open = await chrome.tabs.query({});
+            if (open.length <= 1) await chrome.tabs.create({});
+            await chrome.tabs.remove(tabId);
+            moved = true;
+          } catch (e) { moved = false; }
+        }
+        sendResponse({ ok: moved });
+        return;
+      }
 
       if (msg.type === 'PLK_SET_DEVICE') {
         if (!fromExtPage) { sendResponse({ ok: false, msg: 'denied' }); return; }
