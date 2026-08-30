@@ -86,23 +86,78 @@ async function getReport() {
 }
 async function saveReport(r) { await chrome.storage.local.set({ plk_report: r }); }
 
-// Shared wrong-password handling (global unlock and site unlock use one
-// cooldown pool so brute force can't shop between the two doors).
-async function checkCooldown() {
-  const s = await chrome.storage.session.get({ plk_fail: { n: 0, until: 0 } });
-  const f = s.plk_fail;
-  const now = Date.now();
-  if (f.until && now < f.until) return { blocked: true, waitMs: f.until - now };
-  return { blocked: false, f: f, now: now };
+// Shared wrong-secret handling. Every door that checks a credential (unlock,
+// site unlock, recovery, and the current-password field when changing it)
+// draws on one cooldown pool, so brute force cannot shop between them.
+//
+// Reading the counter, verifying, and writing the counter back straddle
+// awaits, so a burst of concurrent guesses could each read the same
+// pre-increment value and collect its own free try. Every check queues on
+// this chain instead, which both closes that race and serialises a burst
+// rather than letting it run in parallel.
+let credentialGate = Promise.resolve();
+
+// verify() must resolve to a boolean. Resolves to one of:
+//   { blocked: true, waitMs }            cooling down, nothing was checked
+//   { ok: true, now }                    correct
+//   { ok: false, tries, waitMs }         wrong, and now counted
+function guardedVerify(verify) {
+  const run = credentialGate.then(async function () {
+    const s = await chrome.storage.session.get({ plk_fail: { n: 0, until: 0 } });
+    const f = s.plk_fail;
+    const now = Date.now();
+    if (f.until && now < f.until) return { blocked: true, waitMs: f.until - now };
+    if (await verify()) return { ok: true, now: now };
+    const n = (f.n || 0) + 1;
+    const wait = PLK.backoffMs(n);
+    await chrome.storage.session.set({ plk_fail: { n: n, until: wait ? now + wait : 0 } });
+    const r = await getReport();
+    r.fails += 1; r.lastFailAt = now;
+    await saveReport(r);
+    return { ok: false, tries: n, waitMs: wait };
+  });
+  // Keep the chain alive even if a verify throws, or one bad call would wedge
+  // every future credential check.
+  credentialGate = run.then(function () {}, function () {});
+  return run;
 }
-async function recordFail(f, now) {
-  const n = (f.n || 0) + 1;
-  const wait = PLK.backoffMs(n);
-  await chrome.storage.session.set({ plk_fail: { n: n, until: wait ? now + wait : 0 } });
-  const r = await getReport();
-  r.fails += 1; r.lastFailAt = now;
-  await saveReport(r);
-  return { tries: n, waitMs: wait };
+
+async function clearFails() {
+  await chrome.storage.session.set({ plk_fail: { n: 0, until: 0 } });
+}
+
+// Locking and unlocking both read state, decide, and write back across several
+// awaits. Run two at once and one silently overwrites the other — an idle
+// timeout that started deciding before the password was typed still gets to
+// throw the unlock away, which reads to the user as "it asked me again".
+// Both queue on one chain, the same technique the credential checks use.
+let stateGate = Promise.resolve();
+function serialise(fn) {
+  const run = stateGate.then(fn);
+  stateGate = run.then(function () {}, function () {});
+  return run;
+}
+
+// Why this profile locked, so a lock nobody expected can be explained after
+// the fact. Timestamps and a reason string only — no URLs, no credentials.
+//
+// Read-modify-write, so two triggers landing together would otherwise drop an
+// entry, and a log that quietly loses the interesting line is worse than none.
+// Its own chain, not the state one: writing the log must never be able to wait
+// on a lock that is waiting on the log.
+const LOCK_LOG_MAX = 20;
+let lockLogGate = Promise.resolve();
+function noteLockEvent(why, did) {
+  const run = lockLogGate.then(async function () {
+    try {
+      const o = await chrome.storage.local.get({ plk_lockLog: [] });
+      const log = Array.isArray(o.plk_lockLog) ? o.plk_lockLog : [];
+      log.unshift({ at: Date.now(), why: why, did: !!did });
+      await chrome.storage.local.set({ plk_lockLog: log.slice(0, LOCK_LOG_MAX) });
+    } catch (e) { /* diagnostics must never break locking */ }
+  });
+  lockLogGate = run.then(function () {}, function () {});
+  return run;
 }
 
 // ------------------------------------------------------------------ action
@@ -150,15 +205,37 @@ async function guardSweep() {
   }
 }
 
-async function lockNow() {
-  await chrome.storage.session.remove(['plk_unlocked', 'plk_siteUnlocks']); // site passes die with the global lock
+// `confirm` is for callers whose decision was made earlier and may since have
+// gone stale. It is re-run at the moment of writing, with the gate held, so a
+// timer that decided to lock cannot act on a clock reading that an unlock or a
+// keystroke has already replaced. Callers who mean "lock right now" (screen
+// lock, Ctrl+Shift+L, the popup button) pass nothing and always win.
+async function lockNow(why, confirm) {
+  const did = await serialise(async function () {
+    if (confirm && !(await confirm())) return false;
+    await chrome.storage.session.remove(['plk_unlocked', 'plk_siteUnlocks']); // site passes die with the global lock
+    return true;
+  });
+  await noteLockEvent(why || 'manual', did);
+  if (!did) return false;
   await coverAll();
   await broadcastState();
+  return true;
 }
 
 async function unlockNow() {
-  await chrome.storage.session.set({ plk_unlocked: true });
-  await noteActivity();
+  // One write, not two: between setting the flag and stamping the clock there
+  // used to be a window where the profile was unlocked but still looked hours
+  // idle, and an alarm landing in it locked straight back.
+  //
+  // plk_unlockedAt is separate from plk_lastActive on purpose. Ordinary
+  // browsing keeps refreshing plk_lastActive, so it cannot answer "did a human
+  // just prove they hold the password"; only this one can, and the screen-lock
+  // listener needs exactly that question answered.
+  await serialise(function () {
+    const now = Date.now();
+    return chrome.storage.session.set({ plk_unlocked: true, plk_lastActive: now, plk_unlockedAt: now });
+  });
   await broadcastState();
 }
 
@@ -199,11 +276,27 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
 
       if (msg.type === 'PLK_GET') {
         const c = await getCfg();
+        // Content scripts run inside whatever page is open, so they get only
+        // what the overlay actually needs: is it locked, and which theme.
+        // The protected-site list, the failed-attempt log and the rest are
+        // for the extension's own pages. All three fields below are already
+        // inferable from whether a lock screen appears.
+        if (!fromExtPage) {
+          sendResponse({
+            locked: await isLocked(),
+            hasPassword: !!(c && c.hash),
+            theme: (c && c.theme) || 'dark'
+          });
+          return;
+        }
         const dev = await getLocalPrefs();
         const r = await getReport();
+        const lg = await chrome.storage.local.get({ plk_lockLog: [] });
         sendResponse({
+          lockLog: Array.isArray(lg.plk_lockLog) ? lg.plk_lockLog : [],
           locked: await isLocked(),
           hasPassword: !!(c && c.hash),
+          hasRecovery: !!(c && c.rcHash),
           idleAutolock: dev.idleAutolock !== false,
           autolockMin: effectiveAutolockMin(c, dev),
           storedAutolockMin: c && typeof c.autolockMin === 'number' ? c.autolockMin : DEFAULT_AUTOLOCK_MIN,
@@ -224,22 +317,20 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
       if (msg.type === 'PLK_UNLOCK') {
         const c = await getCfg();
         if (!c || !c.hash) { sendResponse({ ok: true, note: 'no-password' }); return; }
-        const cd = await checkCooldown();
-        if (cd.blocked) { sendResponse({ ok: false, waitMs: cd.waitMs, cooldown: true }); return; }
-        const good = await PLK.verifyPassword(String(msg.password || ''), c);
-        if (good) {
-          await chrome.storage.session.set({ plk_fail: { n: 0, until: 0 } });
+        const v = await guardedVerify(function () { return PLK.verifyPassword(String(msg.password || ''), c); });
+        if (v.blocked) { sendResponse({ ok: false, waitMs: v.waitMs, cooldown: true }); return; }
+        if (v.ok) {
+          await clearFails();
           const r = await getReport();
           const reportOut = { fails: r.fails, lastFailAt: r.lastFailAt };
           await saveReport({
-            fails: 0, lastFailAt: 0, lastUnlockAt: cd.now,
+            fails: 0, lastFailAt: 0, lastUnlockAt: v.now,
             lastReportFails: r.fails, lastReportFailAt: r.lastFailAt
           });
           await unlockNow();
           sendResponse({ ok: true, report: reportOut });
         } else {
-          const res = await recordFail(cd.f, cd.now);
-          sendResponse({ ok: false, tries: res.tries, waitMs: res.waitMs });
+          sendResponse({ ok: false, tries: v.tries, waitMs: v.waitMs });
         }
         return;
       }
@@ -257,21 +348,64 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
       if (msg.type === 'PLK_SITE_UNLOCK') {
         const c = await getCfg();
         if (!c || !c.hash) { sendResponse({ ok: true }); return; }
-        const cd = await checkCooldown();
-        if (cd.blocked) { sendResponse({ ok: false, waitMs: cd.waitMs, cooldown: true }); return; }
-        const good = await PLK.verifyPassword(String(msg.password || ''), c);
-        if (good) {
-          await chrome.storage.session.set({ plk_fail: { n: 0, until: 0 } });
+        const v = await guardedVerify(function () { return PLK.verifyPassword(String(msg.password || ''), c); });
+        if (v.blocked) { sendResponse({ ok: false, waitMs: v.waitMs, cooldown: true }); return; }
+        if (v.ok) {
+          await clearFails();
           await markSiteUnlocked(String(msg.host || '').toLowerCase());
           sendResponse({ ok: true });
         } else {
-          const res = await recordFail(cd.f, cd.now);
-          sendResponse({ ok: false, tries: res.tries, waitMs: res.waitMs });
+          sendResponse({ ok: false, tries: v.tries, waitMs: v.waitMs });
         }
         return;
       }
 
-      if (msg.type === 'PLK_LOCK') { await lockNow(); sendResponse({ ok: true }); return; }
+      if (msg.type === 'PLK_LOCK') { await lockNow('popup'); sendResponse({ ok: true }); return; }
+
+      // The lock landing page asking for a way out once it is unlocked. It
+      // stands in for a guarded page (the new tab page, chrome://settings),
+      // and an extension page cannot reach those with location.replace, so
+      // the tab has to be moved from here.
+      //
+      // It used to close itself instead. Closing the only tab closes the
+      // window, closing the last window quits Chrome, and lock state lives in
+      // session storage — so the relaunch came back locked and asked again.
+      // Typing the correct password made the browser vanish and then demand
+      // the password again, round and round. Never close the last tab.
+      if (msg.type === 'PLK_LEAVE') {
+        if (!fromExtPage) { sendResponse({ ok: false, msg: 'denied' }); return; }
+        if (await isLocked()) { sendResponse({ ok: false, msg: 'locked' }); return; }
+        const tabId = sender.tab && sender.tab.id;
+        if (typeof tabId !== 'number') { sendResponse({ ok: false }); return; }
+        // `from` rides in on a query string anyone can edit, so it is matched
+        // rather than followed: the only destinations on offer are the pages
+        // this extension redirects away from in the first place.
+        const from = String(msg.from || '');
+        const back = GUARD_RE.test(from) ? from : 'chrome://newtab/';
+        let moved = true;
+        try { await chrome.tabs.update(tabId, { url: back }); } catch (e) { moved = false; }
+        if (!moved) {
+          // Chrome does not always let an extension navigate a tab to a
+          // chrome:// page. Closing this one is the fallback, but a fresh tab
+          // has to exist first when it is the only one, or closing it takes
+          // the window, the browser, and the unlock with it. tabs.create with
+          // no url is documented to open the New Tab Page.
+          try {
+            const open = await chrome.tabs.query({});
+            // A second PLK_LEAVE for a tab that has already gone must not
+            // leave a stray new tab behind as the price of asking twice.
+            if (!open.some(function (t) { return t.id === tabId; })) {
+              sendResponse({ ok: true });
+              return;
+            }
+            if (open.length <= 1) await chrome.tabs.create({});
+            await chrome.tabs.remove(tabId);
+            moved = true;
+          } catch (e) { moved = false; }
+        }
+        sendResponse({ ok: moved });
+        return;
+      }
 
       if (msg.type === 'PLK_SET_DEVICE') {
         if (!fromExtPage) { sendResponse({ ok: false, msg: 'denied' }); return; }
@@ -292,16 +426,77 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
       if (msg.type === 'PLK_SET_PASSWORD') {
         if (!fromExtPage) { sendResponse({ ok: false, msg: 'denied' }); return; }
         const c = await getCfg();
-        if (c && c.hash) {
-          const good = await PLK.verifyPassword(String(msg.current || ''), c);
-          if (!good) { sendResponse({ ok: false, msg: 'Wrong current password' }); return; }
-        }
         const next = String(msg.next || '');
         if (next.length < 4) { sendResponse({ ok: false, msg: 'New password must be at least 4 characters' }); return; }
+        if (c && c.hash) {
+          // Changing the password is an unlock path: it ends in unlockNow()
+          // and hands back a fresh recovery code. Unlock first, so the only
+          // ways into a locked profile stay PLK_UNLOCK and PLK_RECOVER.
+          if (await isLocked()) { sendResponse({ ok: false, msg: 'locked' }); return; }
+          // fromExtPage is satisfied by the extension's own lock screen, so
+          // without this the current-password field was an unthrottled door
+          // into the same account the throttled ones protect.
+          const v = await guardedVerify(function () { return PLK.verifyPassword(String(msg.current || ''), c); });
+          if (v.blocked) { sendResponse({ ok: false, msg: 'Too many attempts', waitMs: v.waitMs, cooldown: true }); return; }
+          if (!v.ok) { sendResponse({ ok: false, msg: 'Wrong current password', tries: v.tries, waitMs: v.waitMs }); return; }
+          // guardedVerify queues behind every other credential check, so the
+          // isLocked() above can be minutes old by now. Ask again, or a lock
+          // that landed while this waited would be undone by the unlockNow()
+          // at the end of this branch — the exact thing the check above is
+          // there to prevent.
+          if (await isLocked()) { sendResponse({ ok: false, msg: 'locked' }); return; }
+          await clearFails();
+        }
         const rec = await PLK.hashPassword(next);
-        await setCfgPatch({ hash: rec.hash, salt: rec.salt, iter: rec.iter });
+        // A recovery code is a password-equivalent credential, so it is
+        // rotated whenever the password is. Changing the password because you
+        // think it leaked would be pointless if an old code kept working.
+        const code = PLK.makeRecoveryCode();
+        const rcRec = await PLK.hashPassword(PLK.normalizeRecoveryCode(code));
+        await setCfgPatch({
+          hash: rec.hash, salt: rec.salt, iter: rec.iter,
+          rcHash: rcRec.hash, rcSalt: rcRec.salt, rcIter: rcRec.iter
+        });
         await unlockNow(); // you just proved you're the owner
-        sendResponse({ ok: true });
+        // Returned exactly once. Only the hash was stored, so if the user
+        // loses this there is no way to show it again.
+        sendResponse({ ok: true, recoveryCode: code });
+        return;
+      }
+
+      // Forgotten password. Trades a valid recovery code for a new password,
+      // and issues a fresh code so the used one stops working.
+      if (msg.type === 'PLK_RECOVER') {
+        if (!fromExtPage) { sendResponse({ ok: false, msg: 'denied' }); return; }
+        const c = await getCfg();
+        if (!c || !c.rcHash) { sendResponse({ ok: false, msg: 'No recovery code is set on this profile' }); return; }
+        // Shares the cooldown pool with the password door, so an attacker
+        // cannot shop between the two.
+        // Shape of the request is checked before the credential is, so a
+        // malformed password can never produce a different answer depending on
+        // whether the code was right. Nothing is learnable from the error text.
+        const next = String(msg.next || '');
+        if (next.length < 4) { sendResponse({ ok: false, msg: 'New password must be at least 4 characters' }); return; }
+        const typed = PLK.normalizeRecoveryCode(msg.code);
+        const v = await guardedVerify(function () {
+          if (typed.length !== PLK.recoveryCodeLength()) return false;
+          return PLK.verifyPassword(typed, { hash: c.rcHash, salt: c.rcSalt, iter: c.rcIter });
+        });
+        if (v.blocked) { sendResponse({ ok: false, msg: 'Too many attempts', waitMs: v.waitMs, cooldown: true }); return; }
+        if (!v.ok) {
+          sendResponse({ ok: false, msg: 'That recovery code is not valid', tries: v.tries, waitMs: v.waitMs });
+          return;
+        }
+        const rec = await PLK.hashPassword(next);
+        const code = PLK.makeRecoveryCode();
+        const rcRec = await PLK.hashPassword(PLK.normalizeRecoveryCode(code));
+        await clearFails();
+        await setCfgPatch({
+          hash: rec.hash, salt: rec.salt, iter: rec.iter,
+          rcHash: rcRec.hash, rcSalt: rcRec.salt, rcIter: rcRec.iter
+        });
+        await unlockNow();
+        sendResponse({ ok: true, recoveryCode: code });
         return;
       }
 
@@ -361,9 +556,34 @@ chrome.alarms.onAlarm.addListener(function (a) {
       const audible = await chrome.tabs.query({ audible: true });
       if (audible.length) { await noteActivity(); return; }
     } catch (e) { /* noop */ }
-    await lockNow();
+    // Everything above straddles awaits, and the tab query in particular is
+    // slow enough to cover a whole unlock. Ask the clock again on the way in.
+    await lockNow('idle-timeout', async function () {
+      const now = await chrome.storage.session.get({ plk_lastActive: 0 });
+      return !!now.plk_lastActive && Date.now() - now.plk_lastActive >= min * 60000;
+    });
   })();
 });
+
+// What the screen is doing right now, asked rather than remembered.
+//
+// Callback form on purpose. chrome.idle gained promise support later than the
+// oldest Chrome this runs on, and there the promise call returns undefined,
+// which would read as "not locked" and skip a lock that should happen. Every
+// way this can go wrong — old Chrome, an API error, no answer at all —
+// resolves to 'locked', so a lost answer is never a lost lock.
+function currentIdleState() {
+  return new Promise(function (resolve) {
+    let done = false;
+    function finish(s) { if (!done) { done = true; resolve(s); } }
+    setTimeout(function () { finish('locked'); }, 2000);
+    try {
+      chrome.idle.queryState(15, function (s) {
+        finish(chrome.runtime.lastError || !s ? 'locked' : s);
+      });
+    } catch (e) { finish('locked'); }
+  });
+}
 
 function ensureAlarm() {
   chrome.alarms.create(IDLE_ALARM, { periodInMinutes: 1 });
@@ -373,16 +593,47 @@ ensureAlarm(); // idempotent — runs on every service-worker wake
 // OS screen lock (Win+L / walk-away lock) → lock this profile immediately.
 // System-wide "idle" is deliberately ignored: on a shared computer someone
 // else's activity must not keep your profile unlocked.
+//
+// The event says what the screen was doing when it was sent, and this listener
+// can run much later: an idle service worker is torn down, and the event that
+// wakes it back up has already waited. A 'locked' landing after the user has
+// sat down and typed their password locks them straight back out, which is
+// indistinguishable from the extension being broken.
+//
+// The tempting fix — ask chrome.idle what the screen is doing now, and skip
+// the lock if it says 'active' — is wrong, and dangerously so. A late event
+// after a walk-away looks identical: screen locked hours ago, machine slept,
+// event arrives on resume once the user has unlocked Windows, so 'now' is
+// 'active' there too. Skipping on that answer would leave the profile open in
+// exactly the case this whole feature exists for.
+//
+// What separates the two is not the screen, it is whether somebody has proved
+// they hold the password since. So the query only ever runs in the window just
+// after a successful unlock, and only there can a lock be skipped. Reaching
+// that window requires typing the correct password, which is already the way
+// in, so nothing an attacker can do gets easier. Every other path locks
+// immediately, exactly as before.
+const RELOCK_GRACE_MS = 10000;
 chrome.idle.onStateChanged.addListener(function (state) {
+  if (state !== 'locked') return;
   (async function () {
     const c = await getCfg();
     if (!c || !c.hash) return;
-    if (state === 'locked') await lockNow();
+    const s = await chrome.storage.session.get({ plk_unlockedAt: 0 });
+    if (s.plk_unlockedAt && Date.now() - s.plk_unlockedAt < RELOCK_GRACE_MS) {
+      // Still ask, rather than assuming. Hitting Win+L seconds after unlocking
+      // is a real thing people do, and there the screen really is locked.
+      if (await currentIdleState() !== 'locked') {
+        await noteLockEvent('screen-lock-stale', false);
+        return;
+      }
+    }
+    await lockNow('screen-lock');
   })();
 });
 
 chrome.commands.onCommand.addListener(function (cmd) {
-  if (cmd === 'lock-now') lockNow();
+  if (cmd === 'lock-now') lockNow('shortcut');
 });
 
 // While locked (strict), keep data pages unreachable — including mid-session

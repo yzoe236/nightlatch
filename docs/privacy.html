@@ -36,7 +36,7 @@
   <table>
     <tr><th>Data</th><th>Where it is kept</th><th>Why</th></tr>
     <tr>
-      <td>A salted hash of your password<br>(PBKDF2-SHA256, 310,000 iterations)</td>
+      <td>A salted hash of your password<br>(PBKDF2-SHA256, 600,000 iterations)</td>
       <td><code>chrome.storage.sync</code> — Chrome may replicate this between your own signed-in
           browsers, under your own Google Account</td>
       <td>So the same password unlocks on each of your computers. <strong>The password itself is
@@ -58,6 +58,14 @@
       <td><code>chrome.storage.local</code> — this device only, never replicated</td>
       <td>To let you relax the timer on a private machine, and to tell you if someone tried a
           wrong password while you were away.</td>
+    </tr>
+    <tr>
+      <td>The last 20 times this profile locked, and the reason for each<br>
+          (screen lock, idle timeout, the keyboard shortcut, the toolbar button)</td>
+      <td><code>chrome.storage.local</code> — this device only, never replicated</td>
+      <td>So a lock you did not expect can be explained afterwards, on the settings page.
+          <strong>Times and reasons only</strong>: no page addresses, no page content, nothing
+          about your password.</td>
     </tr>
   </table>
 

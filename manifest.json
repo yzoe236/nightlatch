@@ -3,7 +3,7 @@
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6Am9bKHj+ToyWOPXlEqIvQsEH9ypcXg3SRnyk6BCX1ZSfgA1Tf9xhGkzXchSMEYADa6NUwf4jor8o/ddZ3vaKCjI1QiGTHyPbuc4PlN95AfiI7kfwLqrE6BczpdWs3VfDoi8wINyedF2x1lJDMzlYWAVU/WA8FAMVRsvsYgRbv+lfROETOSZ/XbVu6ohimrSBrhctYtTUlM8rxs62M+XHY5ScgLBx8zLtYka/p5dLB7MtutCISEGzq0Mu6/AyxoD71UUvRD90EAh6ambwy3woGA25KH9ADCEmiLRjEcaofhKXkAoO2CTs/pSJP3KXQi6T6/YZuThyN/TAdkMKr7WkQIDAQAB",
   "name": "Nightlatch — Profile Lock for Google Chrome™",
   "short_name": "Nightlatch",
-  "version": "0.5.0",
+  "version": "0.6.1",
   "description": "Password-lock your Chrome profile on shared computers. The lock state never syncs — unlocking at home never unlocks the lab machine.",
   "permissions": ["storage", "idle", "tabs", "scripting", "alarms"],
   "host_permissions": ["<all_urls>"],
